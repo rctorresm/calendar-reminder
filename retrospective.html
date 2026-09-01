@@ -1,0 +1,230 @@
+<title>Calendar Reminder Retrospective</title>
+<style>
+:root{
+  --paper:#F5F7FA; --card:#FFFFFF; --ink:#16202E; --ink-soft:#46566B;
+  --line:#D7DEE7; --blue:#1E88E5; --orange:#FB8C00; --blue-tint:#E8F2FC;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --paper:#0E1520; --card:#141C29; --ink:#E8EDF4; --ink-soft:#93A2B8;
+    --line:#263140; --blue:#4FA8F0; --orange:#FFA733; --blue-tint:#152537;
+  }
+}
+:root[data-theme="dark"]{
+  --paper:#0E1520; --card:#141C29; --ink:#E8EDF4; --ink-soft:#93A2B8;
+  --line:#263140; --blue:#4FA8F0; --orange:#FFA733; --blue-tint:#152537;
+}
+*{box-sizing:border-box}
+body{
+  background:var(--paper); color:var(--ink); margin:0;
+  font-family:-apple-system,"Segoe UI",system-ui,sans-serif;
+  line-height:1.55;
+}
+.wrap{max-width:800px; margin:0 auto; padding:56px 24px 96px;}
+.mono{font-family:Consolas,"Cascadia Mono","SF Mono",Menlo,monospace;}
+h1,h2,h3{font-family:Georgia,"Iowan Old Style",serif; text-wrap:balance; color:var(--ink);}
+h1{font-size:2.1rem; margin:0 0 6px;}
+h2{font-size:1.4rem; margin:0 0 4px;}
+p{max-width:65ch}
+.eyebrow{
+  font-family:Consolas,"Cascadia Mono",monospace; font-size:.72rem;
+  letter-spacing:.12em; text-transform:uppercase; color:var(--blue);
+  margin:0 0 10px;
+}
+header.top{display:flex; gap:20px; align-items:flex-start; margin-bottom:8px;}
+header.top svg{flex-shrink:0;}
+.sub{color:var(--ink-soft); font-size:1.02rem; max-width:60ch; margin:10px 0 0;}
+
+.stats{
+  display:grid; grid-template-columns:repeat(4,1fr); gap:1px;
+  background:var(--line); border:1px solid var(--line); border-radius:8px;
+  overflow:hidden; margin:32px 0 48px;
+}
+.stat{background:var(--card); padding:16px 14px;}
+.stat .n{font-family:Consolas,"Cascadia Mono",monospace; font-variant-numeric:tabular-nums; font-size:1.5rem; color:var(--blue); display:block;}
+.stat .l{font-size:.74rem; color:var(--ink-soft); margin-top:2px;}
+
+.rail{position:relative; padding-left:28px; margin:0 0 56px;}
+.rail::before{content:"";position:absolute; left:6px; top:6px; bottom:6px; width:2px; background:var(--line);}
+.phase{position:relative; margin-bottom:40px;}
+.phase:last-child{margin-bottom:0;}
+.phase::before{
+  content:""; position:absolute; left:-28px; top:5px; width:11px; height:11px;
+  border-radius:50%; background:var(--card); border:2px solid var(--blue);
+}
+.phase h2{margin-bottom:8px;}
+.phase p{color:var(--ink-soft); margin:0 0 10px;}
+.phase ul{margin:10px 0 0; padding-left:20px; color:var(--ink-soft);}
+.phase li{margin-bottom:6px;}
+.phase li b{color:var(--ink); font-weight:600;}
+
+.palette{display:flex; gap:8px; margin:14px 0 4px; flex-wrap:wrap;}
+.swatch{width:26px; height:26px; border-radius:6px; border:1px solid rgba(0,0,0,.12);}
+
+.ledger{border:1px solid var(--line); border-radius:8px; overflow:hidden; margin:0 0 56px;}
+.ledger-head{background:var(--blue-tint); padding:14px 18px; border-bottom:1px solid var(--line);}
+.ledger-head .eyebrow{margin:0;}
+.bug{padding:16px 18px; border-bottom:1px solid var(--line); background:var(--card);}
+.bug:last-child{border-bottom:none;}
+.bug-title{display:flex; align-items:baseline; gap:10px; font-weight:600; margin-bottom:4px;}
+.bug-title .mark{color:var(--orange); font-family:Consolas,monospace; font-size:.85rem;}
+.bug p{color:var(--ink-soft); margin:0; font-size:.94rem;}
+.bug .fix{color:var(--ink); margin-top:6px; font-size:.94rem;}
+.bug .fix b{color:var(--blue);}
+
+.outcome{
+  background:var(--card); border:1px solid var(--line); border-radius:8px;
+  padding:24px 26px; margin:0 0 40px;
+}
+.outcome p{color:var(--ink); margin:0;}
+.outcome .quote{font-family:Georgia,serif; font-style:italic; font-size:1.15rem; color:var(--ink); margin:0 0 10px;}
+.outcome .who{color:var(--ink-soft); font-size:.85rem;}
+
+.backlog{list-style:none; padding:0; margin:0;}
+.backlog li{
+  display:flex; gap:12px; padding:12px 0; border-bottom:1px solid var(--line);
+  color:var(--ink-soft); font-size:.95rem;
+}
+.backlog li:last-child{border-bottom:none;}
+.backlog .tag{
+  font-family:Consolas,monospace; font-size:.68rem; letter-spacing:.06em;
+  color:var(--blue); border:1px solid var(--line); border-radius:4px;
+  padding:2px 7px; height:fit-content; white-space:nowrap; text-transform:uppercase;
+}
+footer{color:var(--ink-soft); font-size:.82rem; margin-top:56px; border-top:1px solid var(--line); padding-top:20px;}
+</style>
+
+<div class="wrap">
+
+<header class="top">
+  <svg width="64" height="64" viewBox="0 0 64 64" style="border-radius:14px; box-shadow:0 1px 3px rgba(0,0,0,.15);" aria-hidden="true">
+    <rect x="1" y="1" width="62" height="62" rx="14" fill="#FFFFFF" stroke="#D0D2D6" stroke-width="1.5"/>
+    <rect x="21" y="12" width="4" height="9" rx="2" fill="#37474F"/>
+    <rect x="39" y="12" width="4" height="9" rx="2" fill="#37474F"/>
+    <rect x="15" y="19" width="32" height="30" rx="4" fill="#FFFFFF" stroke="#37474F" stroke-width="2.2"/>
+    <rect x="17.5" y="21.5" width="27" height="8.5" fill="#1E88E5"/>
+    <rect x="15" y="19" width="32" height="30" rx="4" fill="none" stroke="#37474F" stroke-width="2.2"/>
+    <line x1="19" y1="38" x2="43" y2="38" stroke="#C8C8CD" stroke-width="1.4"/>
+    <circle cx="46" cy="46" r="13.5" fill="#FFFFFF" stroke="#D0D2D6" stroke-width="1.2"/>
+    <path d="M46 36.5 L57 55.5 L35 55.5 Z" fill="#FB8C00" stroke="#1565B2" stroke-width="1.4" stroke-linejoin="round"/>
+    <text x="46" y="52.5" text-anchor="middle" font-family="Georgia,serif" font-weight="bold" font-size="10" fill="#FFFFFF">!</text>
+  </svg>
+  <div>
+    <p class="eyebrow">Build Retrospective</p>
+    <h1>Calendar Reminder</h1>
+    <p class="sub">A Windows desktop app that watches a virtual assistant's shared Google Calendars and won't let a reminder go unnoticed — built session-long, end to end, and now running on a second person's PC.</p>
+  </div>
+</header>
+
+<div class="stats">
+  <div class="stat"><span class="n">62</span><span class="l">automated tests, all green</span></div>
+  <div class="stat"><span class="n">9</span><span class="l">flash colors, per calendar</span></div>
+  <div class="stat"><span class="n">6</span><span class="l">real bugs found &amp; fixed</span></div>
+  <div class="stat"><span class="n">1</span><span class="l">friend, signed in and working</span></div>
+</div>
+
+<div class="rail">
+
+  <div class="phase">
+    <h2>Foundation</h2>
+    <p>Python + PySide6, built to spec: OAuth sign-in (read-only Calendar scope only), a two-loop scheduler — sync the calendar list and events, then check what's due — SQLite cache, Windows toast notifications, system tray, and start-with-Windows. Shipped with 21 tests before a single manual click.</p>
+    <ul>
+      <li><b>Security was the design brief, not an afterthought:</b> no auto-update mechanism anywhere in the app (the single biggest way a legitimate tool turns into a backdoor later), refresh token in Windows Credential Manager via <span class="mono">keyring</span> — never a plaintext file, parameterized SQL throughout, a single-instance guard so two copies can never both decide "not yet notified" for the same event.</li>
+      <li><b>The distribution model was a deliberate trade-off, made explicitly:</b> one shared Google Cloud OAuth client baked into every build, so a recipient never touches Google Cloud Console — traded against the isolation of everyone bringing their own client. Documented candidly in <span class="mono">SECURITY.md</span>, with a per-install opt-out left in Settings for anyone who wants it.</li>
+    </ul>
+  </div>
+
+  <div class="phase">
+    <h2>Getting the credentials in place</h2>
+    <p>The one step that couldn't be automated: signing into a real Google account and clicking through Google's own consent screens. Walked through it live, screen by screen — new Cloud project, Calendar API enabled, OAuth consent screen configured External, <span class="mono">calendar.readonly</span> scope added, a Desktop OAuth client created, and the resulting <span class="mono">client_secret.json</span> downloaded and placed. Confirmed along the way that Testing-mode apps cap out at 100 pre-approved emails and log test users out every 7 days — the real reason a colleague's corporate sign-in needed her email added to that list by hand later on.</p>
+  </div>
+
+  <div class="phase">
+    <h2>Living with it — the reminder itself evolved from watching it fire</h2>
+    <p>Every change here came from actually using the app, not from re-reading the spec.</p>
+    <ul>
+      <li><b>The attention cue, three iterations:</b> a fixed few flashes of the screen border → not persistent enough for someone turned away from their desk, so it became an indefinite breathing pulse paired with a details window that only stops when acknowledged. The border itself went from a blink to an eased fade, 3&times; slower on request, then user-adjustable (Slow / Normal / Fast).</li>
+      <li><b>One color for everyone became one color per calendar</b> — first as a dropdown, then rebuilt as an actual clickable swatch after "I don't want the color's name, I want to see the color," and expanded from 6 to 9 (three more — pink, teal, brown — added on request). The same color now tints its calendar's row in the Upcoming Events table, so whose event it is reads at a glance.</li>
+      <li><b>Sync went from a 5-minute rolling window to once a minute, aligned to the wall clock</b> (<span class="mono">:00</span> and <span class="mono">:30</span>), after noticing the two loops didn't line up — which surfaced a real race condition (below).</li>
+      <li><b>"Just today" turned out to need its own fix</b> — the sync window was a rolling 24 hours from right now, which quietly bled into tomorrow rather than stopping at midnight.</li>
+    </ul>
+    <p style="margin-top:14px;">The final 9-color palette, as it ships:</p>
+    <div class="palette">
+      <span class="swatch" style="background:#E53935"></span>
+      <span class="swatch" style="background:#FDD835"></span>
+      <span class="swatch" style="background:#1E88E5"></span>
+      <span class="swatch" style="background:#43A047"></span>
+      <span class="swatch" style="background:#FB8C00"></span>
+      <span class="swatch" style="background:#8E24AA"></span>
+      <span class="swatch" style="background:#EC407A"></span>
+      <span class="swatch" style="background:#00897B"></span>
+      <span class="swatch" style="background:#6D4C41"></span>
+    </div>
+  </div>
+
+  <div class="phase">
+    <h2>Making it feel like real software</h2>
+    <ul>
+      <li>Switching Google accounts used to silently <b>delete</b> the previous account's calendars — colors included — since nothing tracked which account a calendar belonged to. Fixed by scoping every calendar row to its account (identified via that account's own primary-calendar ID, no extra permission needed), verified against the live database with real calendars, not just a synthetic test.</li>
+      <li>A custom icon, redesigned once on feedback: from a blue "R" badge to a white-ground calendar glyph with an orange warning triangle — checked for legibility at actual 16px tray size before finalizing either time.</li>
+      <li>Confirmed the close button was already wired to minimize to tray rather than quit, with "Quit" reserved for the tray's own menu.</li>
+    </ul>
+  </div>
+
+  <div class="phase">
+    <h2>Turning it into a file a second person could run</h2>
+    <p>Packaging surfaced two bugs that never would have shown up running from source — the kind that only exist once code is actually frozen into an <span class="mono">.exe</span>.</p>
+  </div>
+
+</div>
+
+<div class="ledger">
+  <div class="ledger-head"><p class="eyebrow" style="margin:0;">Real bugs, found and fixed</p></div>
+
+  <div class="bug">
+    <div class="bug-title"><span class="mark">01</span> Sync and reminder check could run in either order</div>
+    <p>Two scheduled jobs due at the exact same instant have no guaranteed order — the reminder check could run before that minute's sync finished, seeing stale data and deferring a fresh event to the next tick.</p>
+    <p class="fix">Fix: <b>one function call</b> — sync, then check — instead of two independent jobs hoping to land in sequence.</p>
+  </div>
+  <div class="bug">
+    <div class="bug-title"><span class="mark">02</span> Sound toggle could never actually turn sound on</div>
+    <p>The toast library defaults every notification to silent unless told otherwise. The code only ever called that setting to turn sound <i>off</i> — never to turn it on — so the checkbox had no real effect either way.</p>
+    <p class="fix">Fix: switched to <span class="mono">winsound.MessageBeep</span>, a direct Windows call that doesn't depend on the toast's own audio path (which separately turned out to need a registered app shortcut this app doesn't have).</p>
+  </div>
+  <div class="bug">
+    <div class="bug-title"><span class="mark">03</span> The database schema went missing in the packaged build</div>
+    <p>The schema lived in its own <span class="mono">.sql</span> file — invisible to PyInstaller's automatic bundling, which only follows Python imports. The packaged app crashed on first launch with a file-not-found.</p>
+    <p class="fix">Fix: embedded the schema as a Python string in <span class="mono">db.py</span> instead of documenting one more easy-to-forget build flag — removes the failure mode rather than papering over it.</p>
+  </div>
+  <div class="bug">
+    <div class="bug-title"><span class="mark">04</span> Bundled files were being looked for in the wrong folder</div>
+    <p>Modern PyInstaller puts bundled data in an <span class="mono">_internal\</span> subfolder next to the <span class="mono">.exe</span>, not the exe's own folder — the app was resolving <span class="mono">client_secret.json</span> and the icon to a path that doesn't exist in a real packaged build.</p>
+    <p class="fix">Fix: resolve via <span class="mono">sys._MEIPASS</span>, the path PyInstaller's own bootloader sets for exactly this — with a regression test locking in which one wins.</p>
+  </div>
+  <div class="bug">
+    <div class="bug-title"><span class="mark">05</span> "Today's events" was a rolling 24 hours, not a calendar day</div>
+    <p>The sync window ran from right now to 24 hours later — technically not "forever," since every sync fully replaces the cache, but it did bleed past midnight into tomorrow.</p>
+    <p class="fix">Fix: bounded to local midnight instead, for both the sync window and the Upcoming Events display.</p>
+  </div>
+  <div class="bug">
+    <div class="bug-title"><span class="mark">06</span> Switching Google accounts deleted the other account's calendars</div>
+    <p>The cleanup step that drops calendars no longer visible to the signed-in account wasn't scoped to that account — so switching accounts wiped every calendar (and its chosen color) that didn't belong to the new one.</p>
+    <p class="fix">Fix: every calendar row is tagged with the account it came from; switching away just hides it, switching back brings it — and its color — right back.</p>
+  </div>
+</div>
+
+<div class="outcome">
+  <p class="quote">"She was able to log into her Google account and it works perfectly as expected."</p>
+  <p class="who">— reported after handing the packaged app to a colleague using a corporate Google account, first try.</p>
+</div>
+
+<h2 style="margin-bottom:14px;">Left for later, on purpose</h2>
+<ul class="backlog">
+  <li><span class="tag">Feature</span> Bring back the "Copy Reminder" button on the alert window, removed earlier when the window was simplified.</li>
+  <li><span class="tag">Process</span> Move the Google Cloud OAuth app from Testing to a verified Production app, so sign-in isn't limited to a pre-approved email list and sessions stop expiring every 7 days.</li>
+  <li><span class="tag">Accepted</span> If the exact same calendar were ever shared to two different Google accounts used on one machine, only one account's copy would be tracked — a known, accepted limitation for how this app is actually used.</li>
+</ul>
+
+<footer>Calendar Reminder — built, tested, and delivered in one continuous session.</footer>
+
+</div>

@@ -1,0 +1,22 @@
+__pycache__/
+*.pyc
+.venv/
+venv/
+env/
+build/
+dist/
+*.spec
+!CalendarReminder.spec
+*.zip
+
+# Secrets & local data — never commit these
+client_secret*.json
+token.json
+*.db
+*.sqlite
+*.sqlite3
+.env
+
+.pytest_cache/
+.mypy_cache/
+*.log

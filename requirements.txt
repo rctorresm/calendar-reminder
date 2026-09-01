@@ -1,0 +1,15 @@
+# Pinned exact versions for supply-chain integrity.
+# Regenerate a hash-locked version with:
+#   pip install pip-tools
+#   pip-compile --generate-hashes --output-file=requirements.lock.txt requirements.txt
+# then install with: pip install --require-hashes -r requirements.lock.txt
+
+PySide6==6.8.1
+google-api-python-client==2.156.0
+google-auth==2.37.0
+google-auth-oauthlib==1.2.1
+google-auth-httplib2==0.2.0
+APScheduler==3.10.4
+keyring==25.5.0
+winotify==1.1.0
+tzdata==2024.2
