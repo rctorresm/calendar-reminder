@@ -6,7 +6,10 @@ calendars she's been given access to — without touching anyone else's
 calendar settings.
 
 See [SECURITY.md](SECURITY.md) for the security model — read that before
-handing this app to anyone else.
+handing this app to anyone else. See [PRIVACY.md](PRIVACY.md) for what
+Google Calendar data this app accesses and what it does with it — this
+is the page to link as the app's privacy policy when publishing the
+Google Cloud OAuth consent screen (README.md §1).
 
 ## Architecture
 
