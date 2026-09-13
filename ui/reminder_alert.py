@@ -21,7 +21,7 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
 )
 
-from reminders.notifications import format_time_12h
+from reminders.notifications import format_lead_time, format_time_12h
 from reminders.reminder_service import DueEvent
 
 
@@ -47,7 +47,7 @@ class ReminderAlertDialog(QDialog):
 
         minutes = round(event.minutes_until_start)
         time_str = format_time_12h(event.start)
-        detail_label = QLabel(f"{event.calendar_name} — starts in {minutes} min at {time_str}")
+        detail_label = QLabel(f"{event.calendar_name} — starts {format_lead_time(minutes)} at {time_str}")
         detail_label.setWordWrap(True)
         layout.addWidget(detail_label)
 

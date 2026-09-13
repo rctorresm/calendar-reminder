@@ -19,7 +19,11 @@ from reminders.attention_cue import DEFAULT_SPEED_NAME, SPEED_CHOICES
 from system import startup
 from ui.calendar_selector import CalendarSelectorWidget
 
-REMINDER_OPTIONS = [5, 10, 15, 20, 30]
+REMINDER_OPTIONS = [0, 5, 10, 15, 20, 30]
+
+
+def _reminder_option_label(minutes: int) -> str:
+    return "At event start time" if minutes == 0 else f"{minutes} minutes before"
 
 
 class SettingsDialog(QDialog):
@@ -123,11 +127,11 @@ class SettingsDialog(QDialog):
 
         self._reminder_combo = QComboBox()
         for minutes in REMINDER_OPTIONS:
-            self._reminder_combo.addItem(f"{minutes} minutes before", minutes)
+            self._reminder_combo.addItem(_reminder_option_label(minutes), minutes)
         current = int(self._controller.db.get_setting("reminder_minutes", "15"))
         index = self._reminder_combo.findData(current)
         if index == -1:
-            self._reminder_combo.addItem(f"{current} minutes before", current)
+            self._reminder_combo.addItem(_reminder_option_label(current), current)
             index = self._reminder_combo.count() - 1
         self._reminder_combo.setCurrentIndex(index)
         self._reminder_combo.currentIndexChanged.connect(self._on_reminder_changed)

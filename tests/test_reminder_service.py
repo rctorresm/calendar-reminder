@@ -39,6 +39,33 @@ def test_event_already_started_is_not_due():
     assert due == []
 
 
+def test_zero_minute_reminder_is_due_at_exact_start():
+    events = [make_event(0)]
+    due = find_due_events(events, NOW, threshold_minutes=0)
+    assert len(due) == 1
+
+
+def test_zero_minute_reminder_still_fires_when_poll_lands_seconds_late():
+    """A 0-minute ('at event start time') reminder shouldn't be missed just
+    because the clock-aligned poll tick lands a few seconds after the exact
+    start second — see LATE_POLL_GRACE_MINUTES."""
+    events = [make_event(-0.5)]
+    due = find_due_events(events, NOW, threshold_minutes=0)
+    assert len(due) == 1
+
+
+def test_zero_minute_reminder_not_due_well_before_start():
+    events = [make_event(5)]
+    due = find_due_events(events, NOW, threshold_minutes=0)
+    assert due == []
+
+
+def test_zero_minute_reminder_not_due_well_after_start():
+    events = [make_event(-5)]
+    due = find_due_events(events, NOW, threshold_minutes=0)
+    assert due == []
+
+
 def test_cancelled_event_excluded():
     events = [make_event(10, status="cancelled")]
     assert find_due_events(events, NOW, threshold_minutes=15) == []
