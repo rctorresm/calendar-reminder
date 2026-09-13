@@ -105,8 +105,15 @@ def run_reminder_cycle(
     now = now or datetime.now(timezone.utc)
     threshold_minutes = int(db.get_setting("reminder_minutes", str(DEFAULT_REMINDER_MINUTES)))
     horizon = now + timedelta(minutes=threshold_minutes + 5)
+    # The DB query's lower bound must allow the same grace period find_due_events
+    # does below, or it silently excludes an event the instant "now" ticks past
+    # its start -- before find_due_events ever gets a chance to still call it
+    # due. Without this, "at event start time" (threshold_minutes=0) could
+    # never actually fire: the query would drop the event from its result set
+    # a moment after start, every single cycle from then on.
+    query_floor = now - timedelta(minutes=LATE_POLL_GRACE_MINUTES)
 
-    events = db.upcoming_events(now.isoformat(), horizon.isoformat(), account_email)
+    events = db.upcoming_events(query_floor.isoformat(), horizon.isoformat(), account_email)
     due = find_due_events(events, now, threshold_minutes)
 
     notified: list[DueEvent] = []
