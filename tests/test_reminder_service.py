@@ -1,8 +1,26 @@
 from datetime import datetime, timedelta, timezone
 
-from reminders.reminder_service import detect_long_gap, end_of_local_day, find_due_events
+import pytest
+
+from database.db import Database
+from reminders.reminder_service import detect_long_gap, end_of_local_day, find_due_events, run_reminder_cycle
 
 NOW = datetime(2026, 8, 17, 10, 0, 0, tzinfo=timezone.utc)
+
+
+class FakeNotifier:
+    def __init__(self):
+        self.notified = []
+
+    def notify(self, event):
+        self.notified.append(event)
+
+
+@pytest.fixture
+def db(tmp_path):
+    database = Database(tmp_path / "test.db")
+    yield database
+    database.close()
 
 
 def make_event(minutes_from_now, **overrides):
@@ -64,6 +82,50 @@ def test_zero_minute_reminder_not_due_well_after_start():
     events = [make_event(-5)]
     due = find_due_events(events, NOW, threshold_minutes=0)
     assert due == []
+
+
+def test_zero_minute_reminder_fires_end_to_end_for_event_that_just_started(db):
+    """Regression test: db.upcoming_events' own SQL lower bound used to be
+    exactly 'now', with no grace period of its own -- so the instant 'now'
+    ticked past an event's start time, the query dropped that event from
+    its result set before find_due_events' grace window ever got a chance
+    to still call it due (and every later cycle re-ran the same query, so
+    it never came back). That's what silently broke "at event start time"
+    end to end even though find_due_events alone tested fine. Exercises
+    run_reminder_cycle against a real database, not just find_due_events,
+    so a regression here can't hide behind an in-memory-only test again."""
+    account = "john@example.com"
+    db.upsert_calendars(
+        [{"calendar_id": "john@example.com", "name": "John", "access_role": "owner", "primary": True}],
+        account,
+    )
+    db.set_calendar_selected("john@example.com", True)
+    db.set_setting("reminder_minutes", "0")
+
+    started_30_seconds_ago = NOW - timedelta(seconds=30)
+    db.replace_events_for_calendar(
+        "john@example.com",
+        [
+            {
+                "event_id": "evt1",
+                "calendar_id": "john@example.com",
+                "title": "Test Reminder",
+                "start_time": started_30_seconds_ago.isoformat(),
+                "end_time": (started_30_seconds_ago + timedelta(minutes=30)).isoformat(),
+                "location": None,
+                "is_all_day": 0,
+                "status": "confirmed",
+                "html_link": None,
+                "updated_at": NOW.isoformat(),
+            }
+        ],
+    )
+
+    notifier = FakeNotifier()
+    notified = run_reminder_cycle(db, notifier, now=NOW, account_email=account)
+
+    assert len(notified) == 1
+    assert len(notifier.notified) == 1
 
 
 def test_cancelled_event_excluded():
