@@ -1,0 +1,65 @@
+name: Build Windows executable
+
+# PyInstaller doesn't cross-compile, so this has to run on an actual
+# Windows machine -- windows-latest, not the more common ubuntu-latest.
+# Fires on every push (so pushing a feature branch gets you a test build
+# immediately, without waiting for a PR to merge) and can be re-run by
+# hand from the Actions tab.
+on:
+  push:
+    branches:
+      - master
+      - "claude/**"
+  workflow_dispatch: {}
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt
+          pip install -r requirements-dev.txt
+
+      - name: Run tests
+        run: pytest
+
+      - name: Package with PyInstaller
+        # Deliberately does NOT bundle client_secret.json (see README.md
+        # section 3 and SECURITY.md): that file is this project's shared
+        # Google OAuth client secret, and this build artifact is a CI
+        # download anyone with read access to the repo can fetch. Baking
+        # a real credential into something that widely downloadable is
+        # exactly the kind of leak SECURITY.md's distribution guidance
+        # warns against, so this test build ships without it -- sign in
+        # via Settings > Account > "Use my own Google credentials" once
+        # it's running, using the client_secret.json you already have
+        # from README.md section 1.
+        shell: pwsh
+        run: |
+          pyinstaller --name CalendarReminder --windowed --onedir --icon=assets/icon.ico `
+            --add-data "assets;assets" app.py
+
+      - name: Zip build output
+        shell: pwsh
+        run: Compress-Archive -Path dist/CalendarReminder/* -DestinationPath CalendarReminder-windows.zip
+
+      - name: Compute SHA-256 checksum
+        # Per SECURITY.md: publish a checksum alongside every build so a
+        # recipient can verify the file wasn't tampered with in transit.
+        shell: pwsh
+        run: (Get-FileHash CalendarReminder-windows.zip -Algorithm SHA256).Hash | Out-File -Encoding utf8 CalendarReminder-windows.zip.sha256.txt
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: CalendarReminder-windows
+          path: |
+            CalendarReminder-windows.zip
+            CalendarReminder-windows.zip.sha256.txt
+          retention-days: 14
