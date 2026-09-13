@@ -10,7 +10,7 @@ dismissed.
 
 from __future__ import annotations
 
-from PySide6.QtCore import Qt, Signal
+from PySide6.QtCore import Qt, QTimer, Signal
 from PySide6.QtGui import QCloseEvent, QColor
 from PySide6.QtWidgets import (
     QApplication,
@@ -21,7 +21,7 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
 )
 
-from reminders.notifications import format_lead_time, format_time_12h
+from reminders.notifications import build_reminder_text, format_lead_time, format_time_12h
 from reminders.reminder_service import DueEvent
 
 
@@ -58,9 +58,12 @@ class ReminderAlertDialog(QDialog):
             layout.addWidget(location_label)
 
         button_row = QHBoxLayout()
+        self._copy_button = QPushButton("Copy Reminder")
+        self._copy_button.clicked.connect(self._copy_reminder)
         ok_button = QPushButton("OK")
         ok_button.setDefault(True)
         ok_button.clicked.connect(self.close)
+        button_row.addWidget(self._copy_button)
         button_row.addStretch()
         button_row.addWidget(ok_button)
         layout.addLayout(button_row)
@@ -72,6 +75,14 @@ class ReminderAlertDialog(QDialog):
     @property
     def event(self) -> DueEvent:
         return self._event
+
+    def _copy_reminder(self) -> None:
+        """Copies plain, human-ready reminder text to the clipboard — the
+        app never sends it automatically. Doesn't close the dialog or
+        count as acknowledgment; only OK (or closing the window) does."""
+        QApplication.clipboard().setText(build_reminder_text(self._event))
+        self._copy_button.setText("Copied!")
+        QTimer.singleShot(1500, lambda: self._copy_button.setText("Copy Reminder"))
 
     def _position(self, offset_index: int) -> None:
         screen = QApplication.primaryScreen()
