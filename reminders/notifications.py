@@ -20,12 +20,21 @@ def format_time_12h(dt: datetime) -> str:
     return f"{hour}:{local.minute:02d} {'AM' if local.hour < 12 else 'PM'}"
 
 
+def format_lead_time(minutes: int) -> str:
+    """Phrasing for how far out an event is. A reminder set to fire 'at
+    event start time' rounds to 0, and the late-poll grace window (see
+    reminder_service.LATE_POLL_GRACE_MINUTES) can even make it slightly
+    negative if the check ran a few seconds after the exact start — both
+    should read as 'now', not '0 min' or a negative number."""
+    return "now" if minutes <= 0 else f"in {minutes} min"
+
+
 class Notifier:
     def notify(self, event: DueEvent, play_sound: bool = True) -> None:
         title = "Calendar Reminder"
         minutes = round(event.minutes_until_start)
         time_str = format_time_12h(event.start)
-        body = f"{event.calendar_name}: {event.title} starts in {minutes} min at {time_str}."
+        body = f"{event.calendar_name}: {event.title} starts {format_lead_time(minutes)} at {time_str}."
         if event.location:
             body += f" ({event.location})"
 
@@ -55,7 +64,6 @@ def build_reminder_text(event: DueEvent) -> str:
     """Text for the 'Copy Reminder' button — plain, human, ready to paste
     into a chat message. The app never sends this automatically."""
     time_str = format_time_12h(event.start)
-    return (
-        f'Just a reminder that you have "{event.title}" at {time_str}, '
-        f"in about {round(event.minutes_until_start)} minutes."
-    )
+    minutes = round(event.minutes_until_start)
+    timing = "right now" if minutes <= 0 else f"in about {minutes} minutes"
+    return f'Just a reminder that you have "{event.title}" at {time_str}, {timing}.'

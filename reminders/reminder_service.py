@@ -7,9 +7,9 @@ notifier.
 Design note on the "tolerance window" from the spec: rather than only
 firing within a narrow band around the exact threshold (e.g. 14-16 minutes
 for a 15-minute reminder), this fires for the *entire* window from "now"
-through the threshold: 0 <= minutes_until_start <= threshold. Combined with
-the notifications table (event_id + calendar_id + start_time) as the
-dedupe key, this is strictly safer than a narrow band:
+through the threshold: -LATE_POLL_GRACE_MINUTES <= minutes_until_start <=
+threshold. Combined with the notifications table (event_id + calendar_id +
+start_time) as the dedupe key, this is strictly safer than a narrow band:
 
 * A slow/delayed poll cycle can never skip past a narrow window and miss
   the event entirely.
@@ -18,6 +18,14 @@ dedupe key, this is strictly safer than a narrow band:
 * Duplicate prevention still guarantees exactly one notification per
   (event, start time), because after the first notification the DB check
   short-circuits every later cycle.
+
+LATE_POLL_GRACE_MINUTES exists for the "at event start time" (0-minute)
+setting: the check runs on a clock-aligned tick (every 30s), so a poll can
+land a few seconds after the exact start second, at which point
+minutes_until_start has already gone slightly negative. Without this grace
+window, a 0-minute reminder would silently never fire. It's small and
+fixed rather than tied to the configured threshold, so it doesn't change
+behavior for any other setting beyond the same tiny window.
 """
 
 from __future__ import annotations
@@ -29,6 +37,7 @@ from datetime import datetime, timedelta, timezone
 logger = logging.getLogger(__name__)
 
 DEFAULT_REMINDER_MINUTES = 15
+LATE_POLL_GRACE_MINUTES = 1
 
 
 @dataclass(frozen=True)
@@ -66,7 +75,8 @@ def find_due_events(events, now: datetime, threshold_minutes: int) -> list[DueEv
     """events: iterable of row-like objects with event_id, calendar_id,
     calendar_name, title, start_time (ISO string), location, status,
     is_all_day. Returns events whose start is between now and
-    now + threshold_minutes, inclusive, not started, not cancelled, not
+    now + threshold_minutes (plus a small grace period for events that
+    just started, see LATE_POLL_GRACE_MINUTES above), not cancelled, not
     all-day."""
     due: list[DueEvent] = []
     for e in events:
@@ -74,7 +84,7 @@ def find_due_events(events, now: datetime, threshold_minutes: int) -> list[DueEv
             continue
         start = _parse_iso(e["start_time"])
         minutes_until = (start - now).total_seconds() / 60
-        if 0 <= minutes_until <= threshold_minutes:
+        if -LATE_POLL_GRACE_MINUTES <= minutes_until <= threshold_minutes:
             due.append(
                 DueEvent(
                     event_id=e["event_id"],
