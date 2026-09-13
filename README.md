@@ -7,9 +7,10 @@ calendar settings.
 
 See [SECURITY.md](SECURITY.md) for the security model — read that before
 handing this app to anyone else. See [PRIVACY.md](PRIVACY.md) for what
-Google Calendar data this app accesses and what it does with it — this
-is the page to link as the app's privacy policy when publishing the
-Google Cloud OAuth consent screen (README.md §1).
+Google Calendar data this app accesses and what it does with it — kept
+in sync with the hosted copy linked as the app's privacy policy when
+publishing the Google Cloud OAuth consent screen (README.md §1), since
+that link needs to work independent of this repository's visibility.
 
 ## Architecture
 

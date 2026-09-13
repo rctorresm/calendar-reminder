@@ -81,4 +81,4 @@ will be updated to reflect it before that change ships.
 ## Contact
 
 Questions about this policy or how the app handles your data:
-**[your contact email here]**
+**rctorres17@gmail.com**
