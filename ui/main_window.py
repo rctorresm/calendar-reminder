@@ -29,6 +29,7 @@ from reminders.attention_cue import (
 )
 from reminders import reminder_service
 from reminders.notifications import build_reminder_text, format_time_12h
+from ui.change_alert import ChangeAlertDialog
 from ui.reminder_alert import ReminderAlertDialog
 
 COLUMNS = ["Starts In", "Calendar", "Event", "Time"]
@@ -61,6 +62,12 @@ class MainWindow(QMainWindow):
         self._onboarded = False
         self._attention_flasher = AttentionFlasher()
         self._open_alerts: dict[tuple, ReminderAlertDialog] = {}
+        # Meeting added/removed/changed alerts get their own flasher (a
+        # different, dashed double-blink border) and their own set of open
+        # windows, so a reminder and a change alert never overwrite each
+        # other's cue.
+        self._change_flasher = AttentionFlasher()
+        self._open_change_alerts: dict[tuple, ChangeAlertDialog] = {}
         self.setWindowTitle("Calendar Reminder")
         if config.icon_path().exists():
             self.setWindowIcon(QIcon(str(config.icon_path())))
@@ -103,6 +110,7 @@ class MainWindow(QMainWindow):
         controller.calendars_updated.connect(self._reload_table)
         controller.connection_status_changed.connect(self._on_connection_status)
         controller.reminder_fired.connect(self._on_reminder_fired)
+        controller.event_changed.connect(self._on_event_changed)
 
         self._on_auth_state_changed(controller.is_signed_in)
         self._reload_table()
@@ -275,6 +283,26 @@ class MainWindow(QMainWindow):
         oldest_dialog = next(iter(self._open_alerts.values()))
         color = resolve_color(self._controller.db.get_calendar_flash_color(oldest_dialog.event.calendar_id))
         self._start_flash(color)
+
+    def _on_event_changed(self, change):
+        self._reload_table()
+        if self._controller.db.get_setting("flash_enabled", "1") != "1":
+            return
+        key = change.key
+        if key in self._open_change_alerts:
+            return
+        calendar_color = resolve_color(self._controller.db.get_calendar_flash_color(change.calendar_id))
+        dialog = ChangeAlertDialog(change, calendar_color, offset_index=len(self._open_change_alerts))
+        dialog.acknowledged.connect(lambda: self._on_change_alert_acknowledged(key))
+        self._open_change_alerts[key] = dialog
+        dialog.show()
+        if not self._change_flasher.is_active:
+            self._change_flasher.blink_until_stopped()
+
+    def _on_change_alert_acknowledged(self, key: tuple) -> None:
+        self._open_change_alerts.pop(key, None)
+        if not self._open_change_alerts:
+            self._change_flasher.stop()
 
     def _start_flash(self, color) -> None:
         fade_ms = resolve_fade_ms(self._controller.db.get_setting("flash_speed", DEFAULT_SPEED_NAME))

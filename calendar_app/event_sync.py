@@ -19,6 +19,13 @@ from calendar_app.models import EventOccurrence
 logger = logging.getLogger(__name__)
 
 
+class CalendarAccessLost(Exception):
+    """This account can no longer read the calendar (403/404) — access was
+    revoked or the calendar was deleted. Raised rather than returning an
+    empty list so the caller can tell "we can't see this calendar any
+    more" apart from "every meeting on it was just cancelled"."""
+
+
 def _parse_rfc3339(value: str) -> datetime:
     """Parse an RFC3339 timestamp (Google always includes an offset or 'Z')
     into a timezone-aware UTC datetime. Never returns a naive datetime."""
@@ -69,6 +76,7 @@ def parse_event(item: dict[str, Any], calendar_id: str) -> EventOccurrence | Non
         status=status,
         html_link=item.get("htmlLink"),
         updated_at=updated_at,
+        description=item.get("description"),
     )
 
 
@@ -114,6 +122,6 @@ def fetch_events(
                 calendar_id,
                 exc.resp.status,
             )
-            return []
+            raise CalendarAccessLost(calendar_id) from exc
         raise
     return occurrences

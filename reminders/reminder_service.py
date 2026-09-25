@@ -32,7 +32,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, time, timedelta, timezone
 
 logger = logging.getLogger(__name__)
 
@@ -58,17 +58,19 @@ def _parse_iso(value: str) -> datetime:
     return dt
 
 
-def end_of_local_day(now: datetime) -> datetime:
+def end_of_local_day(now: datetime, extra_days: int = 0) -> datetime:
     """UTC-aware timestamp for local midnight tonight — the start of
     tomorrow in the machine's own timezone. Used to bound syncing and
-    display to 'just today' rather than a rolling 24-hour window from
+    display to whole local days rather than a rolling 24-hour window from
     whatever moment 'now' happens to be, which would bleed into
-    tomorrow."""
-    local_now = now.astimezone()
-    local_midnight_tonight = (local_now + timedelta(days=1)).replace(
-        hour=0, minute=0, second=0, microsecond=0
-    )
-    return local_midnight_tonight.astimezone(timezone.utc)
+    tomorrow.
+
+    extra_days pushes it out by that many more whole days (extra_days=4
+    is the end of the 5-day window: today + the next four days)."""
+    local_date = now.astimezone().date() + timedelta(days=1 + extra_days)
+    # A naive datetime's .astimezone() treats it as local wall-clock time,
+    # so this lands on real local midnight even across a DST change.
+    return datetime.combine(local_date, time()).astimezone().astimezone(timezone.utc)
 
 
 def find_due_events(events, now: datetime, threshold_minutes: int) -> list[DueEvent]:

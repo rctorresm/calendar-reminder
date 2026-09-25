@@ -180,6 +180,35 @@ to monitor → done. The app then runs in the system tray; closing the
 window does not stop monitoring — use **Quit** from the tray menu (or
 **Pause Monitoring** to temporarily stop reminders without exiting).
 
+### Meeting-change alerts
+
+On every sync (once a minute) the app compares each monitored calendar
+against what it saw on the previous sync and alerts when a meeting in the
+next five days — today plus the next four, on a rolling basis, so a
+Friday change to Monday's schedule is caught — was:
+
+| Change | Alert window icon |
+| --- | --- |
+| **Added** | big **+**, "NEW MEETING" |
+| **Canceled / deleted / moved more than 5 days out** | big **✕**, "MEETING CANCELED / MOVED" |
+| **Changed** (time or day, title, location, description) | big **pencil**, "MEETING CHANGED", old → new |
+
+Every change alert has the same dark banner and a black-and-white
+striped screen border that double-blinks — no color of its own, because
+color in this app means "whose calendar" (shown as a small dot next to
+the calendar name). They're deliberately unlike the "meeting starting"
+reminder (solid border at the screen edge in the calendar's color, slow
+breathing, window in the center of the screen): change alerts open in
+the **top-right corner**.
+Like reminders, they stay up until you click OK. Turn them off in
+**Settings > Notifications**.
+
+Not reported as changes: a meeting that simply ended, a new day's
+meetings coming into the 5-day window at midnight, RSVP-only updates, and losing access to a
+calendar. The first sync after the app starts (or after a calendar is
+newly ticked) only records a baseline, so changes made while the app was
+closed don't produce alerts.
+
 ## 5. Run the tests
 
 ```bash
@@ -249,6 +278,7 @@ calendar-reminder/
 │   └── token_store.py      # Credential Manager token storage
 ├── calendar_app/
 │   ├── calendar_service.py # calendarList
+│   ├── change_detector.py  # added / removed / changed between syncs
 │   ├── event_sync.py       # events.list + parsing
 │   └── models.py
 ├── reminders/
@@ -259,6 +289,8 @@ calendar-reminder/
 ├── ui/
 │   ├── main_window.py
 │   ├── settings_window.py
+│   ├── reminder_alert.py    # "meeting starting" window
+│   ├── change_alert.py      # "meeting added/removed/changed" window
 │   └── calendar_selector.py
 ├── system/
 │   ├── tray.py
