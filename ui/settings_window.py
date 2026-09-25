@@ -187,8 +187,8 @@ class SettingsDialog(QDialog):
 
         color_hint = QLabel(
             "Reminder flash color is set per calendar, in Monitored Calendars above. "
-            "Meeting-change alerts use a dashed, double-blinking border instead: "
-            "green = added, red = canceled/moved, orange = changed."
+            "Meeting-change alerts use a black-and-white striped, double-blinking border "
+            "instead, with a big icon: + added, ✕ canceled/moved, pencil = changed."
         )
         color_hint.setWordWrap(True)
         color_hint.setStyleSheet("color: gray;")

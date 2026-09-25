@@ -24,7 +24,6 @@ import config
 from reminders.attention_cue import (
     DEFAULT_SPEED_NAME,
     AttentionFlasher,
-    resolve_change_color,
     resolve_color,
     resolve_fade_ms,
 )
@@ -292,21 +291,18 @@ class MainWindow(QMainWindow):
         key = change.key
         if key in self._open_change_alerts:
             return
-        dialog = ChangeAlertDialog(change, offset_index=len(self._open_change_alerts))
+        calendar_color = resolve_color(self._controller.db.get_calendar_flash_color(change.calendar_id))
+        dialog = ChangeAlertDialog(change, calendar_color, offset_index=len(self._open_change_alerts))
         dialog.acknowledged.connect(lambda: self._on_change_alert_acknowledged(key))
         self._open_change_alerts[key] = dialog
         dialog.show()
         if not self._change_flasher.is_active:
-            self._change_flasher.blink_until_stopped(resolve_change_color(change.kind))
+            self._change_flasher.blink_until_stopped()
 
     def _on_change_alert_acknowledged(self, key: tuple) -> None:
         self._open_change_alerts.pop(key, None)
         if not self._open_change_alerts:
             self._change_flasher.stop()
-            return
-        # Same rule as reminders: the border follows the oldest open alert.
-        oldest = next(iter(self._open_change_alerts.values()))
-        self._change_flasher.blink_until_stopped(resolve_change_color(oldest.change.kind))
 
     def _start_flash(self, color) -> None:
         fade_ms = resolve_fade_ms(self._controller.db.get_setting("flash_speed", DEFAULT_SPEED_NAME))

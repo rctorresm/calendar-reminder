@@ -186,16 +186,19 @@ On every sync (once a minute) the app compares each monitored calendar
 against what it saw on the previous sync and alerts when a meeting on
 today's schedule was:
 
-| Change | Border cue | Alert window |
-| --- | --- | --- |
-| **Added** | green, dashed, double-blink | green "+ NEW MEETING" banner |
-| **Canceled / moved to another day** | red, dashed, double-blink | red "✕ MEETING CANCELED / MOVED" banner |
-| **Changed** (time, title, location, description) | orange, dashed, double-blink | orange "✎ MEETING CHANGED" banner, old → new |
+| Change | Alert window icon |
+| --- | --- |
+| **Added** | big **+**, "NEW MEETING" |
+| **Canceled / moved to another day** | big **✕**, "MEETING CANCELED / MOVED" |
+| **Changed** (time, title, location, description) | big **pencil**, "MEETING CHANGED", old → new |
 
-These are deliberately unlike the "meeting starting" reminder (solid
-border at the screen edge, slow breathing, calendar color, window in the
-center of the screen): change alerts use a dashed border set in from the
-edge, a quick blink-blink-pause, and open in the **top-right corner**.
+Every change alert has the same dark banner and a black-and-white
+striped screen border that double-blinks — no color of its own, because
+color in this app means "whose calendar" (shown as a small dot next to
+the calendar name). They're deliberately unlike the "meeting starting"
+reminder (solid border at the screen edge in the calendar's color, slow
+breathing, window in the center of the screen): change alerts open in
+the **top-right corner**.
 Like reminders, they stay up until you click OK. Turn them off in
 **Settings > Notifications**.
 

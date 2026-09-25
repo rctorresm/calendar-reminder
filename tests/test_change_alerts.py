@@ -18,9 +18,9 @@ import app as app_module  # noqa: E402
 from calendar_app import event_sync
 from calendar_app.change_detector import ADDED, CHANGED, REMOVED, EventChange, FieldChange
 from calendar_app.models import EventOccurrence
-from reminders.attention_cue import CHANGE_COLORS, AttentionFlasher, resolve_change_color
+from reminders.attention_cue import CHANGE_STRIPE_DARK, COLOR_CHOICES, AttentionFlasher
 from reminders.notifications import describe_change_lines
-from ui.change_alert import BANNER_TEXT, ChangeAlertDialog
+from ui.change_alert import HEADINGS, ChangeAlertDialog
 
 _app = QApplication.instance() or QApplication([])
 
@@ -216,29 +216,39 @@ def test_describe_rename_shows_old_title():
 # ---- visuals -------------------------------------------------------------
 
 
-def test_each_kind_has_its_own_color_and_banner():
-    assert set(CHANGE_COLORS) == {ADDED, REMOVED, CHANGED}
-    colors = {(c.red(), c.green(), c.blue()) for c in CHANGE_COLORS.values()}
-    assert len(colors) == 3
-    assert len(set(BANNER_TEXT.values())) == 3
-    assert resolve_change_color("bogus") is not None
+def test_each_kind_has_its_own_icon_and_heading_but_no_color_of_its_own():
+    assert set(HEADINGS) == {ADDED, REMOVED, CHANGED}
+    assert len(set(HEADINGS.values())) == 3
+    # The change cue must never be a color a calendar could have.
+    dark = (CHANGE_STRIPE_DARK.red(), CHANGE_STRIPE_DARK.green(), CHANGE_STRIPE_DARK.blue())
+    assert dark not in {(c.red(), c.green(), c.blue()) for c in COLOR_CHOICES.values()}
 
 
-def test_change_blink_loops_until_stopped_and_uses_dashed_border():
+def test_change_blink_loops_until_stopped_and_uses_striped_border():
     flasher = AttentionFlasher()
-    flasher.blink_until_stopped(resolve_change_color(ADDED))
+    flasher.blink_until_stopped()
     assert flasher.is_active
     assert flasher._group.loopCount() == -1
-    assert all(o._dashed for o in flasher._overlays)
+    assert all(o._striped for o in flasher._overlays)
     flasher.stop()
     assert not flasher.is_active
 
 
-def test_change_alert_dialog_emits_acknowledged_on_close_and_escapes_title():
-    change = EventChange(ADDED, CAL, occurrence("a", START, title="<b>x</b>"), calendar_name="Boss")
-    dialog = ChangeAlertDialog(change)
-    acked = []
-    dialog.acknowledged.connect(lambda: acked.append(True))
-    dialog.show()
-    dialog.close()
-    assert acked == [True]
+def test_reminder_flash_is_not_striped():
+    flasher = AttentionFlasher()
+    flasher.flash_until_stopped(fade_ms=50)
+    assert not any(o._striped for o in flasher._overlays)
+    flasher.stop()
+
+
+def test_change_alert_dialog_shows_the_right_icon_and_acknowledges_on_close():
+    for kind in (ADDED, REMOVED, CHANGED):
+        change = EventChange(kind, CAL, occurrence("a", START, title="<b>x</b>"), calendar_name="Boss")
+        dialog = ChangeAlertDialog(change, COLOR_CHOICES["red"])
+        assert dialog._icon.kind == kind
+        dialog._icon.grab()  # paints without error
+        acked = []
+        dialog.acknowledged.connect(lambda: acked.append(True))
+        dialog.show()
+        dialog.close()
+        assert acked == [True]
