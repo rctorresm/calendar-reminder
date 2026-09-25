@@ -180,6 +180,31 @@ to monitor → done. The app then runs in the system tray; closing the
 window does not stop monitoring — use **Quit** from the tray menu (or
 **Pause Monitoring** to temporarily stop reminders without exiting).
 
+### Meeting-change alerts
+
+On every sync (once a minute) the app compares each monitored calendar
+against what it saw on the previous sync and alerts when a meeting on
+today's schedule was:
+
+| Change | Border cue | Alert window |
+| --- | --- | --- |
+| **Added** | green, dashed, double-blink | green "+ NEW MEETING" banner |
+| **Canceled / moved to another day** | red, dashed, double-blink | red "✕ MEETING CANCELED / MOVED" banner |
+| **Changed** (time, title, location) | orange, dashed, double-blink | orange "✎ MEETING CHANGED" banner, old → new |
+
+These are deliberately unlike the "meeting starting" reminder (solid
+border at the screen edge, slow breathing, calendar color, window in the
+center of the screen): change alerts use a dashed border set in from the
+edge, a quick blink-blink-pause, and open in the **top-right corner**.
+Like reminders, they stay up until you click OK. Turn them off in
+**Settings > Notifications**.
+
+Not reported as changes: a meeting that simply ended, tomorrow's meetings
+appearing at midnight, RSVP-only updates, and losing access to a
+calendar. The first sync after the app starts (or after a calendar is
+newly ticked) only records a baseline, so changes made while the app was
+closed don't produce alerts.
+
 ## 5. Run the tests
 
 ```bash
@@ -249,6 +274,7 @@ calendar-reminder/
 │   └── token_store.py      # Credential Manager token storage
 ├── calendar_app/
 │   ├── calendar_service.py # calendarList
+│   ├── change_detector.py  # added / removed / changed between syncs
 │   ├── event_sync.py       # events.list + parsing
 │   └── models.py
 ├── reminders/
@@ -259,6 +285,8 @@ calendar-reminder/
 ├── ui/
 │   ├── main_window.py
 │   ├── settings_window.py
+│   ├── reminder_alert.py    # "meeting starting" window
+│   ├── change_alert.py      # "meeting added/removed/changed" window
 │   └── calendar_selector.py
 ├── system/
 │   ├── tray.py

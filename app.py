@@ -9,6 +9,10 @@ the two polling loops described in the spec:
   events entering the reminder window and fire notifications, with
   duplicate prevention.
 
+Every sync also compares each calendar's fresh events against what the
+previous sync saw (calendar_app/change_detector.py) and raises a change
+alert when a meeting was added, removed/moved off today, or edited.
+
 Nothing in this module sends calendar data anywhere except to/from Google's
 own Calendar API — no analytics, no telemetry, no third-party server.
 """
@@ -16,8 +20,10 @@ own Calendar API — no analytics, no telemetry, no third-party server.
 from __future__ import annotations
 
 import argparse
+import dataclasses
 import logging
 import sys
+import threading
 from datetime import datetime, timezone
 
 from apscheduler.executors.pool import ThreadPoolExecutor as APThreadPoolExecutor
@@ -29,7 +35,7 @@ from PySide6.QtWidgets import QApplication, QMessageBox
 
 import config
 from auth import google_auth
-from calendar_app import calendar_service, event_sync
+from calendar_app import calendar_service, change_detector, event_sync
 from database.db import Database
 from reminders import reminder_service
 from reminders.notifications import Notifier
@@ -76,6 +82,11 @@ class GatedNotifier:
             play_sound = self._db.get_setting("sound_enabled", "1") == "1"
             self._notifier.notify(event, play_sound=play_sound)
 
+    def notify_change(self, change) -> None:
+        if self._db.get_setting("notifications_enabled", "1") == "1":
+            play_sound = self._db.get_setting("sound_enabled", "1") == "1"
+            self._notifier.notify_change(change, play_sound=play_sound)
+
 
 class AppController(QObject):
     calendars_updated = Signal()
@@ -83,6 +94,7 @@ class AppController(QObject):
     auth_state_changed = Signal(bool)
     connection_status_changed = Signal(str)
     reminder_fired = Signal(object)  # reminder_service.DueEvent
+    event_changed = Signal(object)  # change_detector.EventChange
 
     def __init__(self):
         super().__init__()
@@ -92,6 +104,17 @@ class AppController(QObject):
         self.current_account_email: str | None = None
         self._paused = False
         self._last_reminder_tick = datetime.now(timezone.utc)
+        # What the previous successful sync saw, per calendar: (the
+        # timeMax it used, its events). In memory only, on purpose — the
+        # first sync after launch (or after a calendar is newly selected)
+        # just records a baseline and alerts on nothing, so starting the
+        # app in the morning doesn't pop an alert for every meeting that
+        # changed overnight.
+        self._previous_sync: dict[str, tuple[datetime, list]] = {}
+        # sync_events runs on the scheduler thread AND directly from the
+        # GUI (Refresh, ticking a calendar). Two overlapping runs could
+        # both diff against the same baseline and alert twice.
+        self._sync_lock = threading.Lock()
         # A single worker thread: the sync job and the reminder job must
         # never run concurrently against the shared sqlite3 connection
         # (Database is not safe for concurrent writers across threads).
@@ -133,6 +156,7 @@ class AppController(QObject):
         google_auth.sign_out()
         self.service = None
         self.current_account_email = None
+        self._previous_sync.clear()
         self.auth_state_changed.emit(False)
 
     # ---- sync ------------------------------------------------------
@@ -170,17 +194,63 @@ class AppController(QObject):
     def sync_events(self) -> None:
         if not self.service or self._paused:
             return
+        changes = []
+        with self._sync_lock:
+            self._sync_events_locked(changes)
+        # Outside the try in _sync_events_locked: if a later calendar's
+        # fetch fails, changes already found on earlier calendars (whose
+        # baselines have already moved forward) still get announced
+        # rather than silently lost.
+        self._announce_changes(changes)
+
+    def _sync_events_locked(self, changes: list) -> None:
         try:
             now = datetime.now(timezone.utc)
             horizon = reminder_service.end_of_local_day(now)  # just today, not a rolling 24h window
-            for calendar_id in self.db.list_selected_calendar_ids(self.current_account_email):
-                occurrences = event_sync.fetch_events(self.service, calendar_id, now, horizon)
+            selected = self.db.list_selected_calendar_ids(self.current_account_email)
+            # A calendar that was unselected loses its baseline, so
+            # re-selecting it later starts fresh instead of diffing
+            # against a stale snapshot.
+            for calendar_id in list(self._previous_sync):
+                if calendar_id not in selected:
+                    del self._previous_sync[calendar_id]
+            for calendar_id in selected:
+                try:
+                    occurrences = event_sync.fetch_events(self.service, calendar_id, now, horizon)
+                except event_sync.CalendarAccessLost:
+                    # Not "every meeting was cancelled" — we just can't
+                    # see this calendar any more. Clear it quietly.
+                    self.db.replace_events_for_calendar(calendar_id, [])
+                    self._previous_sync.pop(calendar_id, None)
+                    continue
+                changes.extend(self._detect_changes(calendar_id, occurrences, horizon, now))
                 self.db.replace_events_for_calendar(calendar_id, [o.to_row() for o in occurrences])
             self.connection_status_changed.emit("")
             self.events_updated.emit()
         except Exception:
             logger.exception("Failed to sync events")
             self.connection_status_changed.emit("Calendar connection unavailable")
+
+    def _detect_changes(self, calendar_id: str, occurrences, horizon: datetime, now: datetime):
+        previous = self._previous_sync.get(calendar_id)
+        self._previous_sync[calendar_id] = (horizon, list(occurrences))
+        if previous is None:
+            return []  # first look at this calendar: baseline only
+        previous_horizon, previous_events = previous
+        return change_detector.detect_changes(previous_events, occurrences, previous_horizon, now)
+
+    def _announce_changes(self, changes) -> None:
+        if not changes or self.db.get_setting("change_alerts_enabled", "1") != "1":
+            return
+        names = {c["calendar_id"]: c["name"] for c in self.db.list_calendars(self.current_account_email)}
+        for change in changes:
+            change = dataclasses.replace(change, calendar_name=names.get(change.calendar_id, ""))
+            logger.info("Meeting %s on calendar %s: %s", change.kind, change.calendar_id, change.event.event_id)
+            try:
+                self.notifier.notify_change(change)
+            except Exception:
+                logger.exception("Failed to send change notification")
+            self.event_changed.emit(change)
 
     def sync_calendars_and_events(self) -> None:
         """Refreshing the calendar list every cycle (not just at sign-in)

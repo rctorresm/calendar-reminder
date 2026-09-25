@@ -19,11 +19,27 @@ Must only be touched from the Qt GUI thread — it creates QWidgets and
 QVariantAnimations. AppController's reminder cycle runs on a background
 scheduler thread, so this is triggered from MainWindow's reminder_fired
 slot, not from the scheduler job itself.
+
+Meeting-change alerts (added / removed / edited, see
+calendar_app/change_detector.py) use a deliberately different cue so they
+can be told apart from a "meeting starting" reminder out of the corner of
+an eye, before reading anything:
+
+* reminder: a SOLID border at the screen edge, slow smooth breathing,
+  in the calendar's own color.
+* change: a DASHED border set in from the screen edge, a quick
+  double-blink then a pause (blink-blink ... blink-blink), in a fixed
+  color per kind of change — green added, red removed, orange changed.
+
+The pattern (dashed + double-blink) is what makes it recognizable, not
+the color alone: calendar colors are user-picked from the same palette,
+so a green calendar's reminder and a "meeting added" would otherwise look
+alike.
 """
 
 from __future__ import annotations
 
-from PySide6.QtCore import QEasingCurve, QSequentialAnimationGroup, Qt, QVariantAnimation
+from PySide6.QtCore import QEasingCurve, QPauseAnimation, QSequentialAnimationGroup, Qt, QVariantAnimation
 from PySide6.QtGui import QColor, QPainter, QPen
 from PySide6.QtWidgets import QApplication, QWidget
 
@@ -59,12 +75,31 @@ SPEED_CHOICES: dict[str, int] = {
 DEFAULT_SPEED_NAME = "normal"
 FADE_MS = SPEED_CHOICES[DEFAULT_SPEED_NAME]
 
+# Change alerts: fixed color per kind (keys match change_detector's
+# ADDED / REMOVED / CHANGED), a quick double-blink, and a dashed border
+# drawn just inside where the reminder border sits so both stay visible
+# if a reminder and a change alert are up at the same time.
+CHANGE_COLORS: dict[str, QColor] = {
+    "added": COLOR_CHOICES["green"],
+    "removed": COLOR_CHOICES["red"],
+    "changed": COLOR_CHOICES["orange"],
+}
+BLINK_MS = 140  # one leg of a blink — much sharper than any breathing speed
+BLINK_PAUSE_MS = 900
+CHANGE_BORDER_INSET = BORDER_WIDTH
+
+
+def resolve_change_color(kind: str) -> QColor:
+    return CHANGE_COLORS.get(kind, COLOR_CHOICES["orange"])
+
 
 class _BorderOverlay(QWidget):
-    def __init__(self, geometry, color: QColor, border_width: int):
+    def __init__(self, geometry, color: QColor, border_width: int, dashed: bool = False, inset: int = 0):
         super().__init__()
         self._color = color
         self._border_width = border_width
+        self._dashed = dashed
+        self._inset = inset
         self.setWindowFlags(
             Qt.WindowType.FramelessWindowHint
             | Qt.WindowType.WindowStaysOnTopHint
@@ -80,9 +115,14 @@ class _BorderOverlay(QWidget):
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
         pen = QPen(self._color)
         pen.setWidth(self._border_width)
+        if self._dashed:
+            # Dash/gap lengths are in units of the pen width: 3-wide
+            # dashes, 1.5-wide gaps.
+            pen.setDashPattern([3, 1.5])
+            pen.setCapStyle(Qt.PenCapStyle.FlatCap)
         painter.setPen(pen)
-        half = self._border_width // 2
-        painter.drawRect(self.rect().adjusted(half, half, -half, -half))
+        edge = self._inset + self._border_width // 2
+        painter.drawRect(self.rect().adjusted(edge, edge, -edge, -edge))
 
 
 def resolve_color(name: str) -> QColor:
@@ -109,21 +149,39 @@ class AttentionFlasher:
         fade_ms: int = FADE_MS,
     ) -> None:
         """Breathe indefinitely until stop() is called."""
-        self._cleanup()
-        screens = QApplication.screens()
-        if not screens:
+        if not self._show_overlays(color, border_width):
             return
-
-        self._overlays = [_BorderOverlay(s.geometry(), color, border_width) for s in screens]
-        for overlay in self._overlays:
-            overlay.setWindowOpacity(0.0)
-            overlay.setVisible(True)
-
         self._group = QSequentialAnimationGroup()
         self._group.addAnimation(self._make_fade(0.0, 1.0, fade_ms))  # inhale
         self._group.addAnimation(self._make_fade(1.0, 0.0, fade_ms))  # exhale
         self._group.setLoopCount(-1)  # infinite — stop() is the only way out
         self._group.start()
+
+    def blink_until_stopped(self, color: QColor, border_width: int = BORDER_WIDTH) -> None:
+        """The meeting-change cue: a dashed, inset border that double-blinks
+        then pauses, indefinitely until stop() is called."""
+        if not self._show_overlays(color, border_width, dashed=True, inset=CHANGE_BORDER_INSET):
+            return
+        self._group = QSequentialAnimationGroup()
+        for _ in range(2):
+            self._group.addAnimation(self._make_fade(0.0, 1.0, BLINK_MS))
+            self._group.addAnimation(self._make_fade(1.0, 0.0, BLINK_MS))
+        self._group.addAnimation(QPauseAnimation(BLINK_PAUSE_MS))
+        self._group.setLoopCount(-1)
+        self._group.start()
+
+    def _show_overlays(self, color: QColor, border_width: int, dashed: bool = False, inset: int = 0) -> bool:
+        self._cleanup()
+        screens = QApplication.screens()
+        if not screens:
+            return False
+        self._overlays = [
+            _BorderOverlay(s.geometry(), color, border_width, dashed=dashed, inset=inset) for s in screens
+        ]
+        for overlay in self._overlays:
+            overlay.setWindowOpacity(0.0)
+            overlay.setVisible(True)
+        return True
 
     def stop(self) -> None:
         self._cleanup()

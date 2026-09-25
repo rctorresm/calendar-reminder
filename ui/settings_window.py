@@ -179,7 +179,17 @@ class SettingsDialog(QDialog):
             "flash_enabled",
         )
 
-        color_hint = QLabel("Flash color is set per calendar, in Monitored Calendars above.")
+        self._change_alerts_checkbox = self._settings_checkbox(
+            layout,
+            "Alert me when a meeting is added, canceled/moved, or changed",
+            "change_alerts_enabled",
+        )
+
+        color_hint = QLabel(
+            "Reminder flash color is set per calendar, in Monitored Calendars above. "
+            "Meeting-change alerts use a dashed, double-blinking border instead: "
+            "green = added, red = canceled/moved, orange = changed."
+        )
         color_hint.setWordWrap(True)
         color_hint.setStyleSheet("color: gray;")
         layout.addWidget(color_hint)
