@@ -1,11 +1,12 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 
-from PySide6.QtCore import QTimer, Qt
+from PySide6.QtCore import QDate, QTimer, Qt
 from PySide6.QtGui import QCloseEvent, QColor, QIcon
 from PySide6.QtWidgets import (
     QApplication,
+    QDateEdit,
     QDialog,
     QHBoxLayout,
     QHeaderView,
@@ -21,6 +22,7 @@ from PySide6.QtWidgets import (
 )
 
 import config
+from calendar_app import day_view
 from reminders.attention_cue import (
     DEFAULT_SPEED_NAME,
     AttentionFlasher,
@@ -33,6 +35,20 @@ from ui.change_alert import ChangeAlertDialog
 from ui.reminder_alert import ReminderAlertDialog
 
 COLUMNS = ["Starts In", "Calendar", "Event", "Time"]
+DAY_COLUMNS = ["Time", "Calendar", "Event", "Location"]
+
+# Looking at another day snaps back to today after this long without
+# touching the arrows/date picker, so the window left open on some other
+# day doesn't hide what's coming up next.
+RETURN_TO_TODAY_MS = 10 * 60 * 1000
+
+
+def _format_time_range(event) -> str:
+    if event.is_all_day:
+        return "All day"
+    if event.end is None:
+        return format_time_12h(event.start)
+    return f"{format_time_12h(event.start)} – {format_time_12h(event.end)}"
 
 
 def _format_countdown(minutes: float) -> str:
@@ -89,6 +105,8 @@ class MainWindow(QMainWindow):
         toolbar_row.addStretch()
         layout.addLayout(toolbar_row)
 
+        layout.addLayout(self._build_day_nav())
+
         self._table = QTableWidget(0, len(COLUMNS))
         self._table.setHorizontalHeaderLabels(COLUMNS)
         self._table.horizontalHeader().setSectionResizeMode(2, QHeaderView.ResizeMode.Stretch)
@@ -105,6 +123,7 @@ class MainWindow(QMainWindow):
         self._status_label = QLabel("")
         status_bar.addWidget(self._status_label)
 
+        controller.auth_state_changed.connect(lambda _signed_in: self._day_cache.clear())
         controller.auth_state_changed.connect(self._on_auth_state_changed)
         controller.events_updated.connect(self._reload_table)
         controller.calendars_updated.connect(self._reload_table)
@@ -180,10 +199,160 @@ class MainWindow(QMainWindow):
         dialog.resize(420, 460)
         dialog.exec()
 
+    # ---- day navigation (calendar view) ------------------------------
+    #
+    # _viewing_day is None while showing today — the existing live list
+    # from the local cache. Any other day is fetched from Google on demand
+    # (see calendar_app/day_view.py for why, and what it costs).
+
+    def _build_day_nav(self) -> QHBoxLayout:
+        self._viewing_day: date | None = None
+        self._day_cache = day_view.DayCache()
+        self._day_workers: set = set()
+        self._day_error: str | None = None
+
+        row = QHBoxLayout()
+        self._prev_day_button = QPushButton("◀")
+        self._prev_day_button.setToolTip("Previous day")
+        self._prev_day_button.setFixedWidth(40)
+        self._prev_day_button.clicked.connect(lambda: self._step_day(-1))
+        self._today_button = QPushButton("Today")
+        self._today_button.clicked.connect(lambda: self._show_day(None))
+        self._next_day_button = QPushButton("▶")
+        self._next_day_button.setToolTip("Next day")
+        self._next_day_button.setFixedWidth(40)
+        self._next_day_button.clicked.connect(lambda: self._step_day(1))
+
+        self._date_picker = QDateEdit()
+        self._date_picker.setCalendarPopup(True)
+        self._date_picker.setDisplayFormat("ddd, MMM d, yyyy")
+        self._date_picker.dateChanged.connect(self._on_date_picked)
+
+        self._day_heading = QLabel()
+        self._day_heading.setStyleSheet("font-weight: bold;")
+
+        row.addWidget(self._prev_day_button)
+        row.addWidget(self._today_button)
+        row.addWidget(self._next_day_button)
+        row.addWidget(self._date_picker)
+        row.addSpacing(12)
+        row.addWidget(self._day_heading, 1)
+
+        self._return_to_today_timer = QTimer(self)
+        self._return_to_today_timer.setSingleShot(True)
+        self._return_to_today_timer.setInterval(RETURN_TO_TODAY_MS)
+        self._return_to_today_timer.timeout.connect(lambda: self._show_day(None))
+        return row
+
+    def _current_day(self) -> date:
+        return self._viewing_day or day_view.local_today()
+
+    def _step_day(self, delta: int) -> None:
+        self._show_day(self._current_day() + timedelta(days=delta))
+
+    def _on_date_picked(self, qdate: QDate) -> None:
+        self._show_day(date(qdate.year(), qdate.month(), qdate.day()))
+
+    def _show_day(self, day: date | None) -> None:
+        today = day_view.local_today()
+        if day is not None:
+            day = day_view.clamp_day(day, today)
+        self._viewing_day = None if day == today else day
+        self._day_error = None
+        if self._viewing_day is None:
+            self._return_to_today_timer.stop()
+        else:
+            self._return_to_today_timer.start()
+        self._reload_table()
+
+    def _sync_day_nav(self, today: date) -> None:
+        day = self._current_day()
+        self._date_picker.blockSignals(True)
+        earliest = today - timedelta(days=day_view.MAX_DAYS_EACH_WAY)
+        latest = today + timedelta(days=day_view.MAX_DAYS_EACH_WAY)
+        self._date_picker.setDateRange(
+            QDate(earliest.year, earliest.month, earliest.day), QDate(latest.year, latest.month, latest.day)
+        )
+        self._date_picker.setDate(QDate(day.year, day.month, day.day))
+        self._date_picker.blockSignals(False)
+        self._prev_day_button.setEnabled(day > earliest)
+        self._next_day_button.setEnabled(day < latest)
+        self._today_button.setEnabled(self._viewing_day is not None)
+        self._day_heading.setText(day_view.format_day_heading(day, today))
+
+    def _day_cache_key(self, day: date) -> tuple:
+        selected = self._controller.db.list_selected_calendar_ids(self._controller.current_account_email)
+        return (day, tuple(sorted(selected)))
+
+    def _render_other_day(self, day: date) -> None:
+        self._table.setColumnCount(len(DAY_COLUMNS))
+        self._table.setHorizontalHeaderLabels(DAY_COLUMNS)
+
+        if not self._controller.is_signed_in:
+            self._table.setRowCount(0)
+            self._day_heading.setText(self._day_heading.text() + "  ·  sign in to see this day")
+            return
+
+        key = self._day_cache_key(day)
+        events = self._day_cache.get(key)
+        if events is None:
+            if self._day_error:
+                self._table.setRowCount(0)
+                self._day_heading.setText(self._day_heading.text() + f"  ·  {self._day_error}")
+                return
+            self._fetch_day(day, key)
+            events = self._day_cache.stale(key)
+            if events is None:
+                self._table.setRowCount(0)
+                self._day_heading.setText(self._day_heading.text() + "  ·  loading…")
+                return
+
+        if not events:
+            self._day_heading.setText(self._day_heading.text() + "  ·  no meetings")
+        self._table.setRowCount(len(events))
+        db = self._controller.db
+        for i, event in enumerate(events):
+            cells = [_format_time_range(event), event.calendar_name, event.title, event.location or ""]
+            # Live lookup, not the cached color, so a color change in
+            # Settings shows up right away.
+            background = _tinted(resolve_color(db.get_calendar_flash_color(event.calendar_id, event.flash_color)))
+            for col, text in enumerate(cells):
+                item = QTableWidgetItem(text)
+                item.setBackground(background)
+                self._table.setItem(i, col, item)
+        self._table.resizeColumnToContents(0)  # "11:00 AM – 11:45 AM" must not be cut off
+
+    def _fetch_day(self, day: date, key: tuple) -> None:
+        if any(w.key == key for w in self._day_workers):
+            return  # already on its way
+        from app import Worker
+
+        worker = Worker(self._controller.fetch_day, day)
+        worker.key = key
+        worker.succeeded.connect(lambda events, w=worker: self._on_day_fetched(w, events))
+        worker.failed.connect(lambda message, w=worker: self._on_day_fetch_failed(w, message))
+        self._day_workers.add(worker)
+        worker.start()
+
+    def _on_day_fetched(self, worker, events) -> None:
+        self._day_workers.discard(worker)
+        self._day_cache.put(worker.key, events)
+        if self._viewing_day is not None and self._day_cache_key(self._viewing_day) == worker.key:
+            self._reload_table()
+
+    def _on_day_fetch_failed(self, worker, _message: str) -> None:
+        self._day_workers.discard(worker)
+        if self._viewing_day is not None and self._day_cache_key(self._viewing_day) == worker.key:
+            self._day_error = "couldn't load this day — check your connection, then press Refresh"
+            self._reload_table()
+
     # ---- table ---------------------------------------------------------
 
     def _refresh(self):
+        self._day_cache.clear()
+        self._day_error = None
         self._controller.sync_calendars_and_events()
+        self._reload_table()
 
     def _open_settings(self):
         from ui.settings_window import SettingsDialog
@@ -191,6 +360,16 @@ class MainWindow(QMainWindow):
         SettingsDialog(self._controller, self).exec()
 
     def _reload_table(self):
+        today = day_view.local_today()
+        if self._viewing_day == today:  # midnight passed while looking at "tomorrow"
+            self._viewing_day = None
+        self._sync_day_nav(today)
+        if self._viewing_day is not None:
+            self._render_other_day(self._viewing_day)
+            return
+
+        self._table.setColumnCount(len(COLUMNS))
+        self._table.setHorizontalHeaderLabels(COLUMNS)
         now = datetime.now(timezone.utc)
         horizon = reminder_service.end_of_local_day(now).isoformat()  # just today
         rows = self._controller.db.upcoming_events(
@@ -214,6 +393,8 @@ class MainWindow(QMainWindow):
     def _show_row_context_menu(self, pos):
         from PySide6.QtWidgets import QMenu
 
+        if self._viewing_day is not None:
+            return  # "Copy Reminder" is about upcoming meetings — today's list only
         row = self._table.rowAt(pos.y())
         if row < 0:
             return

@@ -36,7 +36,7 @@ from PySide6.QtWidgets import QApplication, QMessageBox
 
 import config
 from auth import google_auth
-from calendar_app import calendar_service, change_detector, event_sync
+from calendar_app import calendar_service, change_detector, day_view, event_sync
 from database.db import Database
 from reminders import reminder_service
 from reminders.notifications import Notifier
@@ -258,6 +258,41 @@ class AppController(QObject):
             except Exception:
                 logger.exception("Failed to send change notification")
             self.event_changed.emit(change)
+
+    def fetch_day(self, day) -> list:
+        """Blocking: every meeting on one local day across the monitored
+        calendars, fetched from Google on demand for the calendar view.
+        Call via Worker from the UI, never directly on the GUI thread.
+
+        Shares _sync_lock with sync_events: the Google API client isn't
+        safe to use from two threads at once."""
+        start, end = day_view.day_bounds(day)
+        results: list = []
+        with self._sync_lock:
+            if not self.service:
+                return results
+            calendars = {c["calendar_id"]: c for c in self.db.list_calendars(self.current_account_email)}
+            for calendar_id in self.db.list_selected_calendar_ids(self.current_account_email):
+                try:
+                    occurrences = event_sync.fetch_events(self.service, calendar_id, start, end)
+                except event_sync.CalendarAccessLost:
+                    continue
+                cal = calendars.get(calendar_id)
+                for o in occurrences:
+                    results.append(
+                        day_view.DayEvent(
+                            calendar_id=calendar_id,
+                            calendar_name=cal["name"] if cal else calendar_id,
+                            flash_color=cal["flash_color"] if cal else "blue",
+                            title=o.title,
+                            start=o.start,
+                            end=o.end,
+                            location=o.location,
+                            is_all_day=o.is_all_day,
+                            html_link=o.html_link,
+                        )
+                    )
+        return day_view.sort_day_events(results)
 
     def sync_calendars_and_events(self) -> None:
         """Refreshing the calendar list every cycle (not just at sign-in)
