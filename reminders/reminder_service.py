@@ -31,13 +31,18 @@ behavior for any other setting beyond the same tiny window.
 from __future__ import annotations
 
 import logging
-from dataclasses import dataclass
+import threading
+from dataclasses import dataclass, replace
 from datetime import datetime, time, timedelta, timezone
 
 logger = logging.getLogger(__name__)
 
 DEFAULT_REMINDER_MINUTES = 15
 LATE_POLL_GRACE_MINUTES = 1
+
+# Settings > Reminder > "Snooze for". Fixed list on purpose.
+SNOOZE_OPTIONS = [3, 5, 10, 15, 20, 30, 60]
+DEFAULT_SNOOZE_MINUTES = 5
 
 
 @dataclass(frozen=True)
@@ -134,6 +139,47 @@ def run_reminder_cycle(
 
     db.prune_old_notifications((now - timedelta(days=1)).isoformat())
     return notified
+
+
+class SnoozeBook:
+    """Reminders someone hit Snooze on, and when each should come back.
+
+    Wall-clock (not a Qt timer) and checked by the regular 30-second
+    reminder tick, so a snooze still comes due correctly after the PC
+    sleeps through it — at most one tick late, same as a normal reminder.
+    Written from the GUI thread (the Snooze button) and read from the
+    scheduler thread (the reminder tick), hence the lock. In memory only:
+    quitting the app drops pending snoozes."""
+
+    def __init__(self):
+        self._lock = threading.Lock()
+        self._pending: dict[tuple, tuple[DueEvent, datetime]] = {}
+
+    @staticmethod
+    def key(event: DueEvent) -> tuple:
+        return (event.event_id, event.calendar_id, event.start.isoformat())
+
+    def add(self, event: DueEvent, minutes: int, now: datetime) -> datetime:
+        fire_at = now + timedelta(minutes=minutes)
+        with self._lock:
+            self._pending[self.key(event)] = (event, fire_at)  # re-snoozing replaces
+        return fire_at
+
+    def pop_due(self, now: datetime) -> list[DueEvent]:
+        """Snoozed reminders whose time has come, with minutes_until_start
+        recomputed for `now`. Each is removed as it's returned."""
+        with self._lock:
+            due_keys = [k for k, (_, fire_at) in self._pending.items() if fire_at <= now]
+            events = [self._pending.pop(k)[0] for k in due_keys]
+        return [replace(e, minutes_until_start=(e.start - now).total_seconds() / 60) for e in events]
+
+    def __len__(self) -> int:
+        with self._lock:
+            return len(self._pending)
+
+    def clear(self) -> None:
+        with self._lock:
+            self._pending.clear()
 
 
 def detect_long_gap(

@@ -6,7 +6,7 @@ import logging
 from datetime import datetime
 
 from calendar_app.change_detector import ADDED, CHANGED, REMOVED, EventChange
-from reminders.reminder_service import DueEvent
+from reminders.reminder_service import LATE_POLL_GRACE_MINUTES, DueEvent
 
 logger = logging.getLogger(__name__)
 
@@ -28,6 +28,15 @@ def format_lead_time(minutes: int) -> str:
     negative if the check ran a few seconds after the exact start — both
     should read as 'now', not '0 min' or a negative number."""
     return "now" if minutes <= 0 else f"in {minutes} min"
+
+
+def format_start_phrase(minutes: int) -> str:
+    """'starts in 5 min' / 'starts now' / 'started 4 min ago' — the last one
+    only happens for a snoozed reminder that comes back after the meeting
+    has begun."""
+    if minutes < -LATE_POLL_GRACE_MINUTES:
+        return f"started {-minutes} min ago"
+    return f"starts {format_lead_time(minutes)}"
 
 
 CHANGE_HEADLINES = {
@@ -149,7 +158,7 @@ class Notifier:
         title = "Calendar Reminder"
         minutes = round(event.minutes_until_start)
         time_str = format_time_12h(event.start)
-        body = f"{event.calendar_name}: {event.title} starts {format_lead_time(minutes)} at {time_str}."
+        body = f"{event.calendar_name}: {event.title} {format_start_phrase(minutes)} at {time_str}."
         if event.location:
             body += f" ({event.location})"
 
@@ -170,5 +179,7 @@ def build_reminder_text(event: DueEvent) -> str:
     into a chat message. The app never sends this automatically."""
     time_str = format_time_12h(event.start)
     minutes = round(event.minutes_until_start)
+    if minutes < -LATE_POLL_GRACE_MINUTES:
+        return f'Just a reminder that "{event.title}" started at {time_str}.'
     timing = "right now" if minutes <= 0 else f"in about {minutes} minutes"
     return f'Just a reminder that you have "{event.title}" at {time_str}, {timing}.'
