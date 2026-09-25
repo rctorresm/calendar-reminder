@@ -180,6 +180,22 @@ to monitor → done. The app then runs in the system tray; closing the
 window does not stop monitoring — use **Quit** from the tray menu (or
 **Pause Monitoring** to temporarily stop reminders without exiting).
 
+### Looking at other days
+
+The main window opens on **today** — the live list of what's still
+coming up, with countdowns. Use **◀ / ▶** to step a day at a time,
+**Today** to jump back, or the date box's calendar popup to jump
+straight to any day up to **24 months back or ahead**. Every meeting on
+that day from every monitored calendar is listed, all-day items first,
+tinted with each calendar's color.
+
+Other days are fetched from Google only when you look at them — one
+small request per monitored calendar, for just that day — and kept in
+memory for 5 minutes (refreshed automatically if you stay on that day,
+never saved to disk). The once-a-minute background check is unchanged.
+If you leave the window on another day, it returns to today on its own
+after 10 minutes.
+
 ### Meeting-change alerts
 
 On every sync (once a minute) the app compares each monitored calendar
@@ -279,6 +295,7 @@ calendar-reminder/
 ├── calendar_app/
 │   ├── calendar_service.py # calendarList
 │   ├── change_detector.py  # added / removed / changed between syncs
+│   ├── day_view.py         # calendar view: day bounds, range, cache
 │   ├── event_sync.py       # events.list + parsing
 │   └── models.py
 ├── reminders/
