@@ -23,8 +23,8 @@ singleEvents=True a recurring meeting's instance keeps the same id when
 just that one instance is rescheduled, and a one-off meeting always keeps
 its id. So a time change shows up as "changed", not as a remove + add.
 
-Only the fields the app already collects are compared (title, start, end,
-location, all-day). `updated_at` is deliberately ignored: Google bumps it
+Compared: title, start, end, location, all-day, and description (the
+meeting's notes/agenda). `updated_at` is deliberately ignored: Google bumps it
 for things like an attendee RSVPing, which would be pure noise here.
 """
 
@@ -43,7 +43,7 @@ CHANGED = "changed"
 
 @dataclass(frozen=True)
 class FieldChange:
-    field: str  # "title" | "start" | "end" | "location" | "all_day"
+    field: str  # "title" | "start" | "end" | "location" | "all_day" | "description"
     old: object
     new: object
 
@@ -74,6 +74,9 @@ def _field_changes(old: EventOccurrence, new: EventOccurrence) -> tuple[FieldCha
         changes.append(FieldChange("location", old.location, new.location))
     if old.is_all_day != new.is_all_day:
         changes.append(FieldChange("all_day", old.is_all_day, new.is_all_day))
+    # Trailing whitespace edits aren't a meaningful change.
+    if (old.description or "").strip() != (new.description or "").strip():
+        changes.append(FieldChange("description", old.description, new.description))
     return tuple(changes)
 
 

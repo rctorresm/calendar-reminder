@@ -76,6 +76,7 @@ def parse_event(item: dict[str, Any], calendar_id: str) -> EventOccurrence | Non
         status=status,
         html_link=item.get("htmlLink"),
         updated_at=updated_at,
+        description=item.get("description"),
     )
 
 

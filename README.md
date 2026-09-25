@@ -190,7 +190,7 @@ today's schedule was:
 | --- | --- | --- |
 | **Added** | green, dashed, double-blink | green "+ NEW MEETING" banner |
 | **Canceled / moved to another day** | red, dashed, double-blink | red "✕ MEETING CANCELED / MOVED" banner |
-| **Changed** (time, title, location) | orange, dashed, double-blink | orange "✎ MEETING CHANGED" banner, old → new |
+| **Changed** (time, title, location, description) | orange, dashed, double-blink | orange "✎ MEETING CHANGED" banner, old → new |
 
 These are deliberately unlike the "meeting starting" reminder (solid
 border at the screen edge, slow breathing, calendar color, window in the

@@ -28,6 +28,10 @@ class EventOccurrence:
     status: str
     html_link: str | None
     updated_at: datetime
+    # Kept in memory only, for change detection — deliberately NOT part of
+    # to_row(), so meeting notes/agendas are never written to the local
+    # database file.
+    description: str | None = None
 
     def to_row(self) -> dict:
         return {

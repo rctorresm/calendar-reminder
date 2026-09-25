@@ -196,6 +196,16 @@ def test_lengthened_meeting_shows_end_time_change():
     assert line.startswith("End time changed:")
 
 
+def test_describe_description_added_updated_removed():
+    def line(old, new):
+        change = EventChange(CHANGED, CAL, occurrence("a", START), fields=(FieldChange("description", old, new),))
+        return describe_change_lines(change)[0]
+
+    assert "added" in line(None, "Agenda")
+    assert "updated" in line("Agenda", "New agenda")
+    assert "removed" in line("Agenda", None)
+
+
 def test_describe_rename_shows_old_title():
     change = EventChange(
         CHANGED, CAL, occurrence("a", START, title="New"), fields=(FieldChange("title", "Old", "New"),)

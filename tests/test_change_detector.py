@@ -101,6 +101,18 @@ def test_location_change_and_none_vs_empty_is_not_a_change():
     assert [f.field for f in changes[0].fields] == ["location"]
 
 
+def test_description_change():
+    before = [make_event("a", description="Agenda: Q3 numbers")]
+    after = [make_event("a", description="Agenda: Q3 numbers + hiring plan")]
+    changes = detect_changes(before, after, HORIZON, NOW)
+    assert [f.field for f in changes[0].fields] == ["description"]
+
+
+def test_description_whitespace_or_none_vs_empty_is_not_a_change():
+    assert detect_changes([make_event("a", description=None)], [make_event("a", description="")], HORIZON, NOW) == []
+    assert detect_changes([make_event("a", description="Notes")], [make_event("a", description="Notes \n")], HORIZON, NOW) == []
+
+
 def test_updated_at_alone_is_not_a_change():
     """Google bumps `updated` for RSVPs and other things nobody needs an
     alert for."""

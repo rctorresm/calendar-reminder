@@ -44,6 +44,20 @@ def test_all_day_event_flagged():
     assert event.is_all_day is True
 
 
+def test_description_is_parsed_but_never_stored_in_the_db_row():
+    item = {
+        "id": "abc123",
+        "status": "confirmed",
+        "summary": "Budget review",
+        "description": "Agenda: Q3 numbers",
+        "start": {"dateTime": "2026-08-17T10:30:00Z"},
+        "end": {"dateTime": "2026-08-17T11:00:00Z"},
+    }
+    event = parse_event(item, "cal1")
+    assert event.description == "Agenda: Q3 numbers"
+    assert "description" not in event.to_row()
+
+
 def test_missing_title_gets_placeholder():
     item = {
         "id": "abc123",

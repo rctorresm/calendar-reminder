@@ -71,6 +71,15 @@ def describe_change_lines(change: EventChange) -> list[str]:
             lines.append(f"End time changed: {old} → {new}.")
         elif f.field == "location":
             lines.append(f"Location changed: {f.old or '(none)'} → {f.new or '(none)'}.")
+        elif f.field == "description":
+            # Descriptions can be long (and are often HTML), so say that it
+            # changed rather than trying to show a diff of it.
+            if not f.new:
+                lines.append("Description (notes/agenda) was removed.")
+            elif not f.old:
+                lines.append("A description (notes/agenda) was added.")
+            else:
+                lines.append("Description (notes/agenda) was updated.")
         elif f.field == "all_day":
             lines.append("Changed to an all-day event." if f.new else "No longer an all-day event.")
     return lines
