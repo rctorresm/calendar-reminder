@@ -252,6 +252,16 @@ class Database:
             (account_email, now_iso, horizon_iso),
         ).fetchall()
 
+    def event_is_scheduled(self, event_id: str, calendar_id: str, start_iso: str) -> bool:
+        """Still in the cache at that exact start time — i.e. not canceled,
+        not moved, and not over (the sync drops meetings once they end)."""
+        row = self._conn.execute(
+            "SELECT 1 FROM events WHERE event_id = ? AND calendar_id = ? AND start_time = ? "
+            "AND status != 'cancelled'",
+            (event_id, calendar_id, start_iso),
+        ).fetchone()
+        return row is not None
+
     # ---- notifications -------------------------------------------------
 
     def was_notified(self, event_id: str, calendar_id: str, event_start_iso: str) -> bool:

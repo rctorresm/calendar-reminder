@@ -16,6 +16,8 @@ from PySide6.QtWidgets import (
 
 import config
 from reminders.attention_cue import DEFAULT_SPEED_NAME, SPEED_CHOICES
+from reminders.reminder_service import SNOOZE_OPTIONS
+from ui.reminder_alert import snooze_label
 from system import startup
 from ui.calendar_selector import CalendarSelectorWidget
 
@@ -137,6 +139,15 @@ class SettingsDialog(QDialog):
         self._reminder_combo.currentIndexChanged.connect(self._on_reminder_changed)
 
         layout.addRow("Notify me:", self._reminder_combo)
+
+        self._snooze_combo = QComboBox()
+        for minutes in SNOOZE_OPTIONS:
+            self._snooze_combo.addItem(snooze_label(minutes), minutes)
+        self._snooze_combo.setCurrentIndex(max(0, self._snooze_combo.findData(self._controller.snooze_minutes())))
+        self._snooze_combo.currentIndexChanged.connect(
+            lambda i: self._controller.db.set_setting("snooze_minutes", str(self._snooze_combo.itemData(i)))
+        )
+        layout.addRow("Snooze for:", self._snooze_combo)
         return group
 
     def _on_reminder_changed(self, index: int):

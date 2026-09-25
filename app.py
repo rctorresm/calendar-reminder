@@ -110,6 +110,7 @@ class AppController(QObject):
         self.current_account_email: str | None = None
         self._paused = False
         self._last_reminder_tick = datetime.now(timezone.utc)
+        self._snoozes = reminder_service.SnoozeBook()
         # What the previous successful sync saw, per calendar: (the
         # timeMax it used, its events). In memory only, on purpose — the
         # first sync after launch (or after a calendar is newly selected)
@@ -163,6 +164,7 @@ class AppController(QObject):
         self.service = None
         self.current_account_email = None
         self._previous_sync.clear()
+        self._snoozes.clear()
         self.auth_state_changed.emit(False)
 
     # ---- sync ------------------------------------------------------
@@ -334,6 +336,38 @@ class AppController(QObject):
             self.reminder_fired.emit(event)
         if due:
             self.events_updated.emit()
+        self._fire_due_snoozes(now)
+
+    def snooze(self, event, minutes: int | None = None) -> None:
+        """Bring this reminder back in `minutes` (default: the Settings >
+        Reminder > Snooze for value)."""
+        if minutes is None:
+            minutes = self.snooze_minutes()
+        fire_at = self._snoozes.add(event, minutes, datetime.now(timezone.utc))
+        logger.info("Reminder for event %s snoozed until %s", event.event_id, fire_at.isoformat())
+
+    def snooze_minutes(self) -> int:
+        try:
+            minutes = int(self.db.get_setting("snooze_minutes", str(reminder_service.DEFAULT_SNOOZE_MINUTES)))
+        except ValueError:
+            minutes = reminder_service.DEFAULT_SNOOZE_MINUTES
+        return minutes if minutes in reminder_service.SNOOZE_OPTIONS else reminder_service.DEFAULT_SNOOZE_MINUTES
+
+    def _fire_due_snoozes(self, now: datetime) -> None:
+        """A snoozed reminder comes back exactly like the first time (toast,
+        sound, flash, window) — unless the meeting has since been canceled,
+        moved, or has already ended, in which case it's quietly dropped. A
+        moved meeting gets its own fresh reminder for the new time anyway,
+        since the dedupe key includes the start time."""
+        for event in self._snoozes.pop_due(now):
+            if not self.db.event_is_scheduled(event.event_id, event.calendar_id, event.start.isoformat()):
+                logger.info("Dropping snoozed reminder for event %s: no longer scheduled", event.event_id)
+                continue
+            try:
+                self.notifier.notify(event)
+            except Exception:
+                logger.exception("Failed to send snoozed reminder")
+            self.reminder_fired.emit(event)
 
     # ---- settings ----------------------------------------------------
 

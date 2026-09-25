@@ -180,6 +180,20 @@ to monitor → done. The app then runs in the system tray; closing the
 window does not stop monitoring — use **Quit** from the tray menu (or
 **Pause Monitoring** to temporarily stop reminders without exiting).
 
+### Snoozing a reminder
+
+Meeting reminder windows have a **Snooze** button next to OK. It closes
+the reminder (and stops the flashing), then brings the same reminder
+back — window, flashing border, notification and sound — after the time
+set in **Settings > Reminder > Snooze for**: 3, 5, 10, 15, 20 or 30
+minutes, or 1 hour (default 5 minutes). You can snooze again as many
+times as you like.
+
+A snoozed reminder is dropped instead of coming back if the meeting was
+canceled, moved (the new time gets its own reminder), or has already
+ended. Pending snoozes are kept only while the app is running. Meeting-
+change alerts don't have a Snooze button.
+
 ### Looking at other days
 
 The main window opens on **today** — the live list of what's still

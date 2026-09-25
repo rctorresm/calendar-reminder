@@ -445,7 +445,13 @@ class MainWindow(QMainWindow):
 
         color = resolve_color(self._controller.db.get_calendar_flash_color(event.calendar_id))
 
-        dialog = ReminderAlertDialog(event, accent_color=color, offset_index=len(self._open_alerts))
+        dialog = ReminderAlertDialog(
+            event,
+            accent_color=color,
+            offset_index=len(self._open_alerts),
+            snooze_minutes=self._controller.snooze_minutes(),
+        )
+        dialog.snoozed.connect(lambda: self._controller.snooze(event))
         dialog.acknowledged.connect(lambda: self._on_alert_acknowledged(key))
         self._open_alerts[key] = dialog
         dialog.show()
