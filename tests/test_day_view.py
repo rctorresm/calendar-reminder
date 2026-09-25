@@ -188,6 +188,7 @@ def test_arrows_step_through_days_and_fetch_each_on_demand(controller, monkeypat
     window._today_button.click()
     assert window._viewing_day is None
     assert window._table.horizontalHeaderItem(0).text() == "Starts In"
+    window.wait_for_background_work()
 
 
 def test_date_picker_jumps_and_is_limited_to_24_months(controller, monkeypatch):
@@ -206,3 +207,4 @@ def test_date_picker_jumps_and_is_limited_to_24_months(controller, monkeypatch):
     window._show_day(today + timedelta(days=5000))
     assert window._viewing_day == today + timedelta(days=MAX_DAYS_EACH_WAY)
     assert not window._next_day_button.isEnabled()
+    window.wait_for_background_work()

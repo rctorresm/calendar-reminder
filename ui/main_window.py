@@ -334,6 +334,12 @@ class MainWindow(QMainWindow):
         self._day_workers.add(worker)
         worker.start()
 
+    def wait_for_background_work(self, timeout_ms: int = 5000) -> None:
+        """Let any in-flight day fetch finish before the database is
+        closed underneath it (quitting while a day is still loading)."""
+        for worker in list(self._day_workers):
+            worker.wait(timeout_ms)
+
     def _on_day_fetched(self, worker, events) -> None:
         self._day_workers.discard(worker)
         self._day_cache.put(worker.key, events)

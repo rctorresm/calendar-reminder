@@ -436,6 +436,7 @@ def main() -> int:
     startup.sync_registration(controller.db.get_setting("start_with_windows", "0") == "1")
 
     exit_code = app.exec()
+    window.wait_for_background_work()
     controller.shutdown()
     return exit_code
 
