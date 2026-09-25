@@ -11,7 +11,8 @@ the two polling loops described in the spec:
 
 Every sync also compares each calendar's fresh events against what the
 previous sync saw (calendar_app/change_detector.py) and raises a change
-alert when a meeting was added, removed/moved off today, or edited.
+alert when a meeting in the next five days (today included) was added,
+removed, or edited.
 
 Nothing in this module sends calendar data anywhere except to/from Google's
 own Calendar API — no analytics, no telemetry, no third-party server.
@@ -44,6 +45,11 @@ from system import startup
 logger = logging.getLogger(__name__)
 
 REMINDER_INTERVAL_SECONDS = 30
+# How far ahead each sync looks: today plus the next four days, on a
+# rolling basis. Wide enough that a Friday afternoon change to Monday's
+# schedule still raises a change alert. Reminders and the main window's
+# list are unaffected — they filter the cache down to what they need.
+SYNC_DAYS = 5
 
 
 class Worker(QThread):
@@ -206,7 +212,8 @@ class AppController(QObject):
     def _sync_events_locked(self, changes: list) -> None:
         try:
             now = datetime.now(timezone.utc)
-            horizon = reminder_service.end_of_local_day(now)  # just today, not a rolling 24h window
+            # Whole local days, not a rolling 24h-style window.
+            horizon = reminder_service.end_of_local_day(now, extra_days=SYNC_DAYS - 1)
             selected = self.db.list_selected_calendar_ids(self.current_account_email)
             # A calendar that was unselected loses its baseline, so
             # re-selecting it later starts fresh instead of diffing

@@ -37,20 +37,47 @@ CHANGE_HEADLINES = {
 }
 
 
-def describe_event_time(start: datetime, is_all_day: bool) -> str:
-    return "All day" if is_all_day else format_time_12h(start)
+def _local_date(dt: datetime, is_all_day: bool):
+    # All-day events are stored as UTC midnight of their calendar date
+    # (see event_sync.parse_event); converting that to local time would
+    # shift it to the previous day west of UTC.
+    return dt.date() if is_all_day else dt.astimezone().date()
 
 
-def describe_change_lines(change: EventChange) -> list[str]:
+def format_day(dt: datetime, is_all_day: bool = False, now: datetime | None = None) -> str:
+    """'today', 'tomorrow', or e.g. 'Mon, Sep 28' — portable (no %-d)."""
+    today = (now or datetime.now()).astimezone().date()
+    day = _local_date(dt, is_all_day)
+    delta = (day - today).days
+    if delta == 0:
+        return "today"
+    if delta == 1:
+        return "tomorrow"
+    return f"{day.strftime('%a, %b')} {day.day}"
+
+
+def describe_event_time(start: datetime, is_all_day: bool, now: datetime | None = None) -> str:
+    """e.g. 'today at 3:00 PM', 'tomorrow (all day)', 'Mon, Sep 28 at 9:30 AM'."""
+    day = format_day(start, is_all_day, now)
+    return f"{day} (all day)" if is_all_day else f"{day} at {format_time_12h(start)}"
+
+
+def _describe_moved(old: datetime, new: datetime, is_all_day: bool, now: datetime | None) -> str:
+    if _local_date(old, is_all_day) == _local_date(new, is_all_day):
+        return f"{format_time_12h(old)} → {format_time_12h(new)}"
+    return f"{describe_event_time(old, is_all_day, now)} → {describe_event_time(new, is_all_day, now)}"
+
+
+def describe_change_lines(change: EventChange, now: datetime | None = None) -> list[str]:
     """Human-readable "what's different" lines, shared by the toast and
     the change alert window."""
     event = change.event
     if change.kind == ADDED:
-        return [f"Starts at {describe_event_time(event.start, event.is_all_day)}."]
+        return [f"Scheduled for {describe_event_time(event.start, event.is_all_day, now)}."]
     if change.kind == REMOVED:
         return [
-            f"Was at {describe_event_time(event.start, event.is_all_day)}.",
-            "It's no longer on today's schedule — it was canceled, deleted, or moved to another day.",
+            f"Was scheduled for {describe_event_time(event.start, event.is_all_day, now)}.",
+            "It was canceled or deleted, or moved more than 5 days out.",
         ]
     lines = []
     by_field = {f.field: f for f in change.fields}
@@ -64,7 +91,7 @@ def describe_change_lines(change: EventChange) -> list[str]:
         if f.field == "title":
             lines.append(f'Renamed from "{f.old}".')
         elif f.field == "start":
-            lines.append(f"Time moved: {format_time_12h(f.old)} → {format_time_12h(f.new)}.")
+            lines.append(f"Time moved: {_describe_moved(f.old, f.new, event.is_all_day, now)}.")
         elif f.field == "end":
             old = format_time_12h(f.old) if f.old else "—"
             new = format_time_12h(f.new) if f.new else "—"

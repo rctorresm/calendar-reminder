@@ -163,7 +163,64 @@ START = datetime(2026, 9, 25, 18, 0, tzinfo=timezone.utc)
 def test_describe_removed_mentions_canceled_or_moved():
     change = EventChange(REMOVED, CAL, occurrence("a", START))
     text = " ".join(describe_change_lines(change))
-    assert "canceled" in text and "moved to another day" in text
+    assert "canceled" in text and "more than 5 days out" in text
+
+
+def test_sync_looks_five_local_days_ahead(controller, monkeypatch):
+    seen = {}
+
+    def fake_fetch(service, cal, now, horizon):
+        seen["now"], seen["horizon"] = now, horizon
+        return []
+
+    monkeypatch.setattr(event_sync, "fetch_events", fake_fetch)
+    controller.sync_events()
+    local_now = seen["now"].astimezone()
+    local_end = seen["horizon"].astimezone()
+    assert (local_end.date() - local_now.date()).days == 5
+    assert (local_end.hour, local_end.minute) == (0, 0)
+
+
+def test_change_to_a_meeting_four_days_out_is_announced(controller):
+    later = future(4 * 24 * 60 - 12 * 60)  # well inside day 5 whatever the time of day
+    controller.feed["events"] = [occurrence("m", later)]
+    controller.sync_events()
+    controller.feed["events"] = [occurrence("m", later, title="Monday planning (moved rooms)")]
+    controller.sync_events()
+    assert [c.kind for c in controller.notifier.changes] == [CHANGED]
+
+
+# Local noon (naive .astimezone() = this machine's timezone), so "today"
+# and "Mon, Sep 28" mean the same thing in any timezone the suite runs in.
+LOCAL_NOON_FRIDAY = datetime(2026, 9, 25, 12, 0).astimezone()
+
+
+def test_added_and_removed_wording_names_the_day():
+    now = LOCAL_NOON_FRIDAY
+    monday = now + timedelta(days=3)
+    added = describe_change_lines(EventChange(ADDED, CAL, occurrence("a", monday)), now=now)
+    assert added[0].startswith("Scheduled for ") and "Sep 28" in added[0]
+    today = describe_change_lines(EventChange(ADDED, CAL, occurrence("a", now + timedelta(hours=1))), now=now)
+    assert "today at" in today[0]
+
+
+def test_moving_to_another_day_shows_both_days():
+    now = LOCAL_NOON_FRIDAY
+    old, new = occurrence("a", now + timedelta(hours=1)), occurrence("a", now + timedelta(days=3, hours=1))
+    change = EventChange(
+        CHANGED, CAL, new, previous=old,
+        fields=(FieldChange("start", old.start, new.start), FieldChange("end", old.end, new.end)),
+    )
+    (line,) = describe_change_lines(change, now=now)
+    assert "today at" in line and "Sep 28" in line
+
+
+def test_all_day_event_day_is_not_shifted_by_timezone():
+    from reminders.notifications import format_day
+
+    now = datetime(2026, 9, 25, 16, 0, tzinfo=timezone.utc)
+    all_day = datetime(2026, 9, 28, tzinfo=timezone.utc)  # how parse_event stores 2026-09-28
+    assert format_day(all_day, is_all_day=True, now=now) in ("Mon, Sep 28",)
 
 
 def test_describe_time_move_shows_old_and_new_time():

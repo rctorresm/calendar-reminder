@@ -158,6 +158,7 @@ class ChangeAlertDialog(QDialog):
         # Whose calendar: the calendar's own color, as a dot — the only
         # place color appears in this window.
         when = describe_event_time(event.start, event.is_all_day)
+        when = when[:1].upper() + when[1:]
         calendar_bits = [html.escape(b) for b in (change.calendar_name, when) if b]
         calendar_label = QLabel(
             f'<span style="color: {_rgb(calendar_color)}; font-size: 14pt;">●</span> ' + " — ".join(calendar_bits)

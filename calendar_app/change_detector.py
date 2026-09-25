@@ -4,16 +4,17 @@
 directly. AppController keeps the previous sync's events per calendar in
 memory and hands both lists here after every successful fetch.
 
-The sync window is "now through local midnight tonight" (see
-AppController.sync_events), and that window moves on its own. Two things
+The sync window is "now through the end of the 5th local day" (today +
+the next four, see AppController.sync_events), and that window moves on
+its own. Two things
 drop out of it or into it without anyone touching the calendar, and must
 never be reported as a change:
 
 * A meeting that has simply ended. Google's timeMin filters on END time,
   so once a meeting is over it stops coming back from the API. It only
   counts as removed if it was still upcoming or in progress (end > now).
-* Tomorrow's meetings at midnight. The window grows by a day, so a whole
-  day of meetings shows up at once. A meeting only counts as added if it
+* A new day's meetings at midnight. The window slides forward a day, so
+  a whole day of meetings (five days out) shows up at once. A meeting only counts as added if it
   starts inside the window the PREVIOUS sync covered (start <
   previous_horizon), i.e. it would have been returned last time if it had
   existed then.
