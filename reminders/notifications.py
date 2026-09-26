@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 from datetime import datetime
 
-from calendar_app.change_detector import ADDED, CHANGED, REMOVED, EventChange
+from calendar_app.change_detector import ADDED, CHANGED, REMOVED, WATCH_DAYS, EventChange
 from reminders.reminder_service import LATE_POLL_GRACE_MINUTES, DueEvent
 
 logger = logging.getLogger(__name__)
@@ -86,7 +86,7 @@ def describe_change_lines(change: EventChange, now: datetime | None = None) -> l
     if change.kind == REMOVED:
         return [
             f"Was scheduled for {describe_event_time(event.start, event.is_all_day, now)}.",
-            "It was canceled or deleted, or moved more than 5 days out.",
+            f"It was canceled or deleted, or moved more than {WATCH_DAYS} days out.",
         ]
     lines = []
     by_field = {f.field: f for f in change.fields}
@@ -155,7 +155,7 @@ class Notifier:
                 logger.exception("Failed to play change notification sound")
 
     def notify(self, event: DueEvent, play_sound: bool = True) -> None:
-        title = "Calendar Reminder"
+        title = "Calendar Reminder — second reminder" if event.is_second else "Calendar Reminder"
         minutes = round(event.minutes_until_start)
         time_str = format_time_12h(event.start)
         body = f"{event.calendar_name}: {event.title} {format_start_phrase(minutes)} at {time_str}."

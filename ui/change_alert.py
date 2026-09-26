@@ -9,8 +9,6 @@ before reading a word of it:
 * A dark banner across the top with a big white icon: a plus for a new
   meeting, an X for canceled/moved, a pencil for changed. A reminder
   window has no banner and no icon.
-* It opens in the top-right corner of the screen (stacking downward),
-  not dead center where reminders open.
 
 The banner is the same dark color for every kind of change, on purpose.
 Color in this app means "whose calendar" (each calendar's flash color),
@@ -28,7 +26,6 @@ import html
 from PySide6.QtCore import QPointF, QRectF, Qt, QUrl, Signal
 from PySide6.QtGui import QCloseEvent, QColor, QDesktopServices, QPainter, QPen, QPolygonF
 from PySide6.QtWidgets import (
-    QApplication,
     QDialog,
     QHBoxLayout,
     QLabel,
@@ -40,6 +37,7 @@ from PySide6.QtWidgets import (
 from calendar_app.change_detector import ADDED, CHANGED, REMOVED, EventChange
 from reminders.attention_cue import CHANGE_STRIPE_DARK
 from reminders.notifications import describe_change_lines, describe_event_time
+from ui.alert_position import center_on_primary_screen
 
 HEADINGS = {
     ADDED: "NEW MEETING",
@@ -54,8 +52,6 @@ WINDOW_TITLES = {
 }
 
 ICON_SIZE = 56
-SCREEN_MARGIN = 24
-STACK_OFFSET = 36
 
 
 def _rgb(color: QColor) -> str:
@@ -198,13 +194,7 @@ class ChangeAlertDialog(QDialog):
         return self._change
 
     def _position(self, offset_index: int) -> None:
-        screen = QApplication.primaryScreen()
-        if not screen:
-            return
-        geometry = screen.availableGeometry()
-        x = geometry.right() - self.width() - SCREEN_MARGIN
-        y = geometry.top() + SCREEN_MARGIN + offset_index * STACK_OFFSET
-        self.move(x, y)
+        center_on_primary_screen(self, offset_index)
 
     def closeEvent(self, event: QCloseEvent) -> None:
         self.acknowledged.emit()

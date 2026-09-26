@@ -11,8 +11,8 @@ the two polling loops described in the spec:
 
 Every sync also compares each calendar's fresh events against what the
 previous sync saw (calendar_app/change_detector.py) and raises a change
-alert when a meeting in the next five days (today included) was added,
-removed, or edited.
+alert when a meeting in the next week (today + the next six days) was
+added, removed, or edited.
 
 Nothing in this module sends calendar data anywhere except to/from Google's
 own Calendar API — no analytics, no telemetry, no third-party server.
@@ -45,11 +45,10 @@ from system import startup
 logger = logging.getLogger(__name__)
 
 REMINDER_INTERVAL_SECONDS = 30
-# How far ahead each sync looks: today plus the next four days, on a
-# rolling basis. Wide enough that a Friday afternoon change to Monday's
-# schedule still raises a change alert. Reminders and the main window's
+# How far ahead each sync looks — change_detector.WATCH_DAYS (today plus
+# the next six days, on a rolling basis). Reminders and the main window's
 # list are unaffected — they filter the cache down to what they need.
-SYNC_DAYS = 5
+SYNC_DAYS = change_detector.WATCH_DAYS
 
 
 class Worker(QThread):

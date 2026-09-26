@@ -25,6 +25,7 @@ from PySide6.QtWidgets import (
 
 from reminders.notifications import build_reminder_text, format_start_phrase, format_time_12h
 from reminders.reminder_service import DEFAULT_SNOOZE_MINUTES, DueEvent
+from ui.alert_position import center_on_primary_screen
 
 
 def snooze_label(minutes: int) -> str:
@@ -45,7 +46,7 @@ class ReminderAlertDialog(QDialog):
     ):
         super().__init__(parent)
         self._event = event
-        self.setWindowTitle("Calendar Reminder")
+        self.setWindowTitle("Calendar Reminder — second reminder" if event.is_second else "Calendar Reminder")
         self.setWindowFlags(self.windowFlags() | Qt.WindowType.WindowStaysOnTopHint)
         self.setStyleSheet(
             "QDialog { border: 3px solid rgb(%d, %d, %d); }"
@@ -53,6 +54,11 @@ class ReminderAlertDialog(QDialog):
         )
 
         layout = QVBoxLayout(self)
+
+        if event.is_second:
+            second_label = QLabel("SECOND REMINDER")
+            second_label.setStyleSheet("color: gray; font-weight: bold; letter-spacing: 1px;")
+            layout.addWidget(second_label)
 
         title_label = QLabel(f"<b>{html.escape(event.title)}</b>")
         title_label.setWordWrap(True)
@@ -109,13 +115,7 @@ class ReminderAlertDialog(QDialog):
         self.close()
 
     def _position(self, offset_index: int) -> None:
-        screen = QApplication.primaryScreen()
-        if not screen:
-            return
-        geometry = screen.availableGeometry()
-        x = geometry.center().x() - self.width() // 2
-        y = geometry.center().y() - self.height() // 2 + offset_index * 48
-        self.move(x, y)
+        center_on_primary_screen(self, offset_index)
 
     def closeEvent(self, event: QCloseEvent) -> None:
         self.acknowledged.emit()

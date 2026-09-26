@@ -4,9 +4,9 @@
 directly. AppController keeps the previous sync's events per calendar in
 memory and hands both lists here after every successful fetch.
 
-The sync window is "now through the end of the 5th local day" (today +
-the next four, see AppController.sync_events), and that window moves on
-its own. Two things
+The sync window is "now through the end of the 7th local day" (today +
+the next six — WATCH_DAYS below, see AppController.sync_events), and that
+window moves on its own. Two things
 drop out of it or into it without anyone touching the calendar, and must
 never be reported as a change:
 
@@ -14,7 +14,7 @@ never be reported as a change:
   so once a meeting is over it stops coming back from the API. It only
   counts as removed if it was still upcoming or in progress (end > now).
 * A new day's meetings at midnight. The window slides forward a day, so
-  a whole day of meetings (five days out) shows up at once. A meeting only counts as added if it
+  a whole day of meetings (a week out) shows up at once. A meeting only counts as added if it
   starts inside the window the PREVIOUS sync covered (start <
   previous_horizon), i.e. it would have been returned last time if it had
   existed then.
@@ -36,6 +36,11 @@ from datetime import datetime
 from typing import Iterable
 
 from calendar_app.models import EventOccurrence
+
+# How many local days (today included) the sync covers and change alerts
+# watch: today + the next six, a rolling full week. Wide enough that a
+# Friday change to next Thursday is caught.
+WATCH_DAYS = 7
 
 ADDED = "added"
 REMOVED = "removed"

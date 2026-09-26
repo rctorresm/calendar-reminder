@@ -163,10 +163,10 @@ START = datetime(2026, 9, 25, 18, 0, tzinfo=timezone.utc)
 def test_describe_removed_mentions_canceled_or_moved():
     change = EventChange(REMOVED, CAL, occurrence("a", START))
     text = " ".join(describe_change_lines(change))
-    assert "canceled" in text and "more than 5 days out" in text
+    assert "canceled" in text and "more than 7 days out" in text
 
 
-def test_sync_looks_five_local_days_ahead(controller, monkeypatch):
+def test_sync_looks_a_full_week_ahead(controller, monkeypatch):
     seen = {}
 
     def fake_fetch(service, cal, now, horizon):
@@ -177,12 +177,12 @@ def test_sync_looks_five_local_days_ahead(controller, monkeypatch):
     controller.sync_events()
     local_now = seen["now"].astimezone()
     local_end = seen["horizon"].astimezone()
-    assert (local_end.date() - local_now.date()).days == 5
+    assert (local_end.date() - local_now.date()).days == 7
     assert (local_end.hour, local_end.minute) == (0, 0)
 
 
-def test_change_to_a_meeting_four_days_out_is_announced(controller):
-    later = future(4 * 24 * 60 - 12 * 60)  # well inside day 5 whatever the time of day
+def test_change_to_a_meeting_six_days_out_is_announced(controller):
+    later = future(6 * 24 * 60 - 12 * 60)  # well inside day 7 whatever the time of day
     controller.feed["events"] = [occurrence("m", later)]
     controller.sync_events()
     controller.feed["events"] = [occurrence("m", later, title="Monday planning (moved rooms)")]
