@@ -27,6 +27,7 @@ from PySide6.QtCore import QPointF, QRectF, Qt, QUrl, Signal
 from PySide6.QtGui import QCloseEvent, QColor, QDesktopServices, QPainter, QPen, QPolygonF
 from PySide6.QtWidgets import (
     QDialog,
+    QFrame,
     QHBoxLayout,
     QLabel,
     QPushButton,
@@ -34,9 +35,9 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from calendar_app.change_detector import ADDED, CHANGED, REMOVED, EventChange
+from calendar_app.change_detector import ADDED, CHANGED, REMOVED, WATCH_DAYS, EventChange
 from reminders.attention_cue import CHANGE_STRIPE_DARK
-from reminders.notifications import describe_change_lines, describe_event_time, google_calendar_url
+from reminders.notifications import describe_change_highlights, describe_event_time, google_calendar_url
 from ui.alert_position import center_on_primary_screen
 
 HEADINGS = {
@@ -56,6 +57,52 @@ ICON_SIZE = 56
 
 def _rgb(color: QColor) -> str:
     return f"rgb({color.red()}, {color.green()}, {color.blue()})"
+
+
+# The highlight box: what changed, big and colored so it's the first thing
+# the eye lands on under the title. (text color, background tint)
+HIGHLIGHT_COLORS = {
+    ADDED: ("#2E7D32", "#E8F5E9"),  # green
+    CHANGED: ("#E65100", "#FFF3E0"),  # orange
+    REMOVED: ("#C62828", "#FFEBEE"),  # red
+}
+
+
+def highlight_html(item, kind: str) -> str:
+    """One highlight line as rich text. Every value is escaped — titles and
+    locations come from other people's calendars."""
+    color, _ = HIGHLIGHT_COLORS.get(kind, HIGHLIGHT_COLORS[CHANGED])
+    label = html.escape(item.label)
+    old = html.escape(item.old) if item.old is not None else None
+    new = html.escape(item.new) if item.new is not None else None
+    big = f"font-size: 15pt; font-weight: bold; color: {color};"
+    if kind in (ADDED, REMOVED):
+        # "NEW  today at 3:00 PM" / "CANCELED  ~~today at 3:00 PM~~" — all in the kind's color.
+        value = f"<s>{old}</s>" if old is not None else new
+        return f'<span style="{big}">{label}&nbsp;&nbsp;{value}</span>'
+    parts = [f'<span style="font-size: 10pt; color: #555;">{label}:</span>&nbsp;&nbsp;']
+    if old is not None:
+        parts.append(f'<span style="font-size: 12pt; color: #888;"><s>{old}</s></span>&nbsp;→&nbsp;')
+    parts.append(f'<span style="{big}">{new}</span>')
+    return "".join(parts)
+
+
+def _build_highlight_box(change: EventChange) -> QFrame:
+    color, tint = HIGHLIGHT_COLORS.get(change.kind, HIGHLIGHT_COLORS[CHANGED])
+    box = QFrame()
+    box.setObjectName("highlight")
+    box.setStyleSheet(
+        f"#highlight {{ background-color: {tint}; border-left: 6px solid {color}; border-radius: 4px; }}"
+    )
+    box_layout = QVBoxLayout(box)
+    box_layout.setContentsMargins(12, 8, 12, 8)
+    box_layout.setSpacing(4)
+    for item in describe_change_highlights(change):
+        line = QLabel(highlight_html(item, change.kind))
+        line.setTextFormat(Qt.TextFormat.RichText)
+        line.setWordWrap(True)
+        box_layout.addWidget(line)
+    return box
 
 
 class ChangeIcon(QWidget):
@@ -151,8 +198,9 @@ class ChangeAlertDialog(QDialog):
         title_label.setStyleSheet("font-size: 13pt;")
         body.addWidget(title_label)
 
-        # Whose calendar: the calendar's own color, as a dot — the only
-        # place color appears in this window.
+        # Whose calendar: the calendar's own color, as a dot. (The only
+        # other color is the highlight box below, whose green/orange/red
+        # means "what happened" and sits on the text, not the border.)
         when = describe_event_time(event.start, event.is_all_day)
         when = when[:1].upper() + when[1:]
         calendar_bits = [html.escape(b) for b in (change.calendar_name, when) if b]
@@ -161,12 +209,16 @@ class ChangeAlertDialog(QDialog):
         )
         body.addWidget(calendar_label)
 
-        for line in describe_change_lines(change):
-            detail = QLabel(line)
-            detail.setWordWrap(True)
-            body.addWidget(detail)
+        self._highlight_box = _build_highlight_box(change)
+        body.addWidget(self._highlight_box)
+        if change.kind == REMOVED:
+            note = QLabel(f"Canceled or deleted, or moved more than {WATCH_DAYS} days out.")
+            note.setWordWrap(True)
+            note.setStyleSheet("color: gray;")
+            body.addWidget(note)
 
-        if change.kind != REMOVED and event.location:
+        location_in_highlight = any(f.field == "location" for f in change.fields)
+        if change.kind != REMOVED and event.location and not location_in_highlight:
             location_label = QLabel(event.location)
             location_label.setWordWrap(True)
             location_label.setStyleSheet("color: gray;")

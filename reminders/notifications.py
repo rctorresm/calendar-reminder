@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from dataclasses import dataclass
 from datetime import datetime
 
 from calendar_app.change_detector import ADDED, CHANGED, REMOVED, WATCH_DAYS, EventChange
@@ -88,6 +89,58 @@ def _describe_moved(old: datetime, new: datetime, is_all_day: bool, now: datetim
     if _local_date(old, is_all_day) == _local_date(new, is_all_day):
         return f"{format_time_12h(old)} → {format_time_12h(new)}"
     return f"{describe_event_time(old, is_all_day, now)} → {describe_event_time(new, is_all_day, now)}"
+
+
+@dataclass(frozen=True)
+class Highlight:
+    """One "what changed" line for the alert window's highlight box:
+    a short label, then the old value (shown crossed out) and/or the new
+    value (shown big and bold). Plain text — the window does the styling
+    and the HTML escaping."""
+
+    label: str
+    old: str | None = None
+    new: str | None = None
+
+
+def _split_moved(old: datetime, new: datetime, is_all_day: bool, now: datetime | None) -> tuple[str, str]:
+    if _local_date(old, is_all_day) == _local_date(new, is_all_day):
+        return format_time_12h(old), format_time_12h(new)
+    return describe_event_time(old, is_all_day, now), describe_event_time(new, is_all_day, now)
+
+
+def describe_change_highlights(change: EventChange, now: datetime | None = None) -> list[Highlight]:
+    """The same facts as describe_change_lines, split into label / old /
+    new so the alert window can make the change itself jump out."""
+    event = change.event
+    when = describe_event_time(event.start, event.is_all_day, now)
+    if change.kind == ADDED:
+        return [Highlight("NEW", new=when)]
+    if change.kind == REMOVED:
+        return [Highlight("CANCELED", old=when)]
+    by_field = {f.field: f for f in change.fields}
+    start, end = by_field.get("start"), by_field.get("end")
+    moved_whole = bool(start and end and end.old and end.new and end.new - start.new == end.old - start.old)
+    items: list[Highlight] = []
+    for f in change.fields:
+        if f.field == "end" and moved_whole:
+            continue
+        if f.field == "start":
+            old, new = _split_moved(f.old, f.new, event.is_all_day, now)
+            items.append(Highlight("Time", old, new))
+        elif f.field == "end":
+            items.append(
+                Highlight("Ends", format_time_12h(f.old) if f.old else "—", format_time_12h(f.new) if f.new else "—")
+            )
+        elif f.field == "title":
+            items.append(Highlight("Renamed", f.old, f.new))
+        elif f.field == "location":
+            items.append(Highlight("Location", f.old or "(none)", f.new or "(none)"))
+        elif f.field == "description":
+            items.append(Highlight("Description", new="removed" if not f.new else "added" if not f.old else "updated"))
+        elif f.field == "all_day":
+            items.append(Highlight("All day", new="now all-day" if f.new else "no longer all-day"))
+    return items
 
 
 def describe_change_lines(change: EventChange, now: datetime | None = None) -> list[str]:
