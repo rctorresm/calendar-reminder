@@ -180,6 +180,14 @@ to monitor → done. The app then runs in the system tray; closing the
 window does not stop monitoring — use **Quit** from the tray menu (or
 **Pause Monitoring** to temporarily stop reminders without exiting).
 
+### Open in Google Calendar
+
+Every alert window — meeting reminders (including second and snoozed
+ones) and new / changed / canceled-meeting alerts — has an **Open in
+Google Calendar** button. It opens that meeting in your browser; for a
+canceled or moved meeting (whose own link would just say "event not
+found") it opens that day instead. It doesn't close the window.
+
 ### Second (backup) reminder
 
 Off by default. In **Settings > Reminder**, tick **"Also send a second

@@ -36,7 +36,7 @@ from PySide6.QtWidgets import (
 
 from calendar_app.change_detector import ADDED, CHANGED, REMOVED, EventChange
 from reminders.attention_cue import CHANGE_STRIPE_DARK
-from reminders.notifications import describe_change_lines, describe_event_time
+from reminders.notifications import describe_change_lines, describe_event_time, google_calendar_url
 from ui.alert_position import center_on_primary_screen
 
 HEADINGS = {
@@ -174,10 +174,14 @@ class ChangeAlertDialog(QDialog):
 
         button_row = QHBoxLayout()
         button_row.setContentsMargins(16, 8, 16, 0)
-        if change.kind in (ADDED, CHANGED) and event.html_link:
-            open_button = QPushButton("Open in Google Calendar")
-            open_button.clicked.connect(lambda: QDesktopServices.openUrl(QUrl(event.html_link)))
-            button_row.addWidget(open_button)
+        # On every change alert. A canceled/moved meeting's own link would
+        # just say "event not found", so that one opens the day instead.
+        self._open_url = google_calendar_url(
+            event.html_link, event.start, event.is_all_day, prefer_day=change.kind == REMOVED
+        )
+        open_button = QPushButton("Open in Google Calendar")
+        open_button.clicked.connect(lambda: QDesktopServices.openUrl(QUrl(self._open_url)))
+        button_row.addWidget(open_button)
         button_row.addStretch()
         ok_button = QPushButton("OK")
         ok_button.setDefault(True)

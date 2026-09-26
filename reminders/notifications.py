@@ -65,6 +65,19 @@ def format_day(dt: datetime, is_all_day: bool = False, now: datetime | None = No
     return f"{day.strftime('%a, %b')} {day.day}"
 
 
+def google_calendar_url(
+    html_link: str | None, start: datetime, is_all_day: bool = False, prefer_day: bool = False
+) -> str:
+    """Where "Open in Google Calendar" goes: the meeting itself when Google
+    gave us its link, otherwise (or with prefer_day, used for a canceled /
+    moved meeting whose own link would just say "event not found") that
+    day in Google Calendar's day view."""
+    if html_link and not prefer_day:
+        return html_link
+    day = _local_date(start, is_all_day)
+    return f"https://calendar.google.com/calendar/r/day/{day.year}/{day.month}/{day.day}"
+
+
 def describe_event_time(start: datetime, is_all_day: bool, now: datetime | None = None) -> str:
     """e.g. 'today at 3:00 PM', 'tomorrow (all day)', 'Mon, Sep 28 at 9:30 AM'."""
     day = format_day(start, is_all_day, now)

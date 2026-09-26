@@ -60,6 +60,7 @@ class DueEvent:
     # True when an earlier reminder for this same meeting already went out
     # (the optional backup reminder) — shown as "Second reminder".
     is_second: bool = False
+    html_link: str | None = None  # Google's own link to this meeting, if any
 
 
 def _parse_iso(value: str) -> datetime:
@@ -107,6 +108,7 @@ def find_due_events(events, now: datetime, threshold_minutes: int) -> list[DueEv
                     start=start,
                     location=e["location"],
                     minutes_until_start=minutes_until,
+                    html_link=e["html_link"] if "html_link" in e.keys() else None,
                 )
             )
     return due

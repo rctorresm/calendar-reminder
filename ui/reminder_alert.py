@@ -12,8 +12,8 @@ from __future__ import annotations
 
 import html
 
-from PySide6.QtCore import Qt, QTimer, Signal
-from PySide6.QtGui import QCloseEvent, QColor
+from PySide6.QtCore import Qt, QTimer, QUrl, Signal
+from PySide6.QtGui import QCloseEvent, QColor, QDesktopServices
 from PySide6.QtWidgets import (
     QApplication,
     QDialog,
@@ -23,7 +23,12 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
 )
 
-from reminders.notifications import build_reminder_text, format_start_phrase, format_time_12h
+from reminders.notifications import (
+    build_reminder_text,
+    format_start_phrase,
+    format_time_12h,
+    google_calendar_url,
+)
 from reminders.reminder_service import DEFAULT_SNOOZE_MINUTES, DueEvent
 from ui.alert_position import center_on_primary_screen
 
@@ -86,7 +91,13 @@ class ReminderAlertDialog(QDialog):
         ok_button = QPushButton("OK")
         ok_button.setDefault(True)
         ok_button.clicked.connect(self.close)
+        # Opens the meeting in the browser. Like Copy Reminder, it doesn't
+        # close the window or count as acknowledging it.
+        self._open_url = google_calendar_url(event.html_link, event.start)
+        self._open_button = QPushButton("Open in Google Calendar")
+        self._open_button.clicked.connect(lambda: QDesktopServices.openUrl(QUrl(self._open_url)))
         button_row.addWidget(self._copy_button)
+        button_row.addWidget(self._open_button)
         button_row.addStretch()
         button_row.addWidget(self._snooze_button)
         button_row.addWidget(ok_button)
