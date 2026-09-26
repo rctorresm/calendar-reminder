@@ -180,6 +180,26 @@ to monitor → done. The app then runs in the system tray; closing the
 window does not stop monitoring — use **Quit** from the tray menu (or
 **Pause Monitoring** to temporarily stop reminders without exiting).
 
+### Open in Google Calendar
+
+Every alert window — meeting reminders (including second and snoozed
+ones) and new / changed / canceled-meeting alerts — has an **Open in
+Google Calendar** button. It opens that meeting in your browser; for a
+canceled or moved meeting (whose own link would just say "event not
+found") it opens that day instead. It doesn't close the window.
+
+### Second (backup) reminder
+
+Off by default. In **Settings > Reminder**, tick **"Also send a second
+(backup) reminder"** to enable the **Second reminder** time picker
+(grayed out until then) — same choices as the main reminder. You then
+get a second meeting reminder at that time, identical to the first but
+labeled **SECOND REMINDER**. It can come before or after the main one.
+If both would come due at the same moment (e.g. the app was opened 3
+minutes before the meeting) you get one reminder, not two; if both are
+set to the same time, it's just one reminder. Meeting-change alerts
+never get a second reminder.
+
 ### Snoozing a reminder
 
 Meeting reminder windows have a **Snooze** button next to OK. It closes
@@ -214,13 +234,12 @@ after 10 minutes.
 
 On every sync (once a minute) the app compares each monitored calendar
 against what it saw on the previous sync and alerts when a meeting in the
-next five days — today plus the next four, on a rolling basis, so a
-Friday change to Monday's schedule is caught — was:
+next week — today plus the next six days, on a rolling basis — was:
 
 | Change | Alert window icon |
 | --- | --- |
 | **Added** | big **+**, "NEW MEETING" |
-| **Canceled / deleted / moved more than 5 days out** | big **✕**, "MEETING CANCELED / MOVED" |
+| **Canceled / deleted / moved more than 7 days out** | big **✕**, "MEETING CANCELED / MOVED" |
 | **Changed** (time or day, title, location, description) | big **pencil**, "MEETING CHANGED", old → new |
 
 Every change alert has the same dark banner and a black-and-white
@@ -228,13 +247,16 @@ striped screen border that double-blinks — no color of its own, because
 color in this app means "whose calendar" (shown as a small dot next to
 the calendar name). They're deliberately unlike the "meeting starting"
 reminder (solid border at the screen edge in the calendar's color, slow
-breathing, window in the center of the screen): change alerts open in
-the **top-right corner**.
+breathing, no banner or icon).
+
+Both kinds of window open in the **center of the main screen** (if
+several are open, each is nudged a little down and right so none hides
+another); the flashing border still shows on every monitor.
 Like reminders, they stay up until you click OK. Turn them off in
 **Settings > Notifications**.
 
 Not reported as changes: a meeting that simply ended, a new day's
-meetings coming into the 5-day window at midnight, RSVP-only updates, and losing access to a
+meetings coming into the 7-day window at midnight, RSVP-only updates, and losing access to a
 calendar. The first sync after the app starts (or after a calendar is
 newly ticked) only records a baseline, so changes made while the app was
 closed don't produce alerts.

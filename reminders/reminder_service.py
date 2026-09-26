@@ -38,6 +38,9 @@ from datetime import datetime, time, timedelta, timezone
 logger = logging.getLogger(__name__)
 
 DEFAULT_REMINDER_MINUTES = 15
+# The optional backup ("second") reminder: off unless the person turns it
+# on in Settings > Reminder. Same choices as the main reminder.
+DEFAULT_BACKUP_REMINDER_MINUTES = 5
 LATE_POLL_GRACE_MINUTES = 1
 
 # Settings > Reminder > "Snooze for". Fixed list on purpose.
@@ -54,6 +57,10 @@ class DueEvent:
     start: datetime
     location: str | None
     minutes_until_start: float
+    # True when an earlier reminder for this same meeting already went out
+    # (the optional backup reminder) — shown as "Second reminder".
+    is_second: bool = False
+    html_link: str | None = None  # Google's own link to this meeting, if any
 
 
 def _parse_iso(value: str) -> datetime:
@@ -70,8 +77,8 @@ def end_of_local_day(now: datetime, extra_days: int = 0) -> datetime:
     whatever moment 'now' happens to be, which would bleed into
     tomorrow.
 
-    extra_days pushes it out by that many more whole days (extra_days=4
-    is the end of the 5-day window: today + the next four days)."""
+    extra_days pushes it out by that many more whole days (extra_days=6
+    is the end of the 7-day window: today + the next six days)."""
     local_date = now.astimezone().date() + timedelta(days=1 + extra_days)
     # A naive datetime's .astimezone() treats it as local wall-clock time,
     # so this lands on real local midnight even across a DST change.
@@ -101,16 +108,36 @@ def find_due_events(events, now: datetime, threshold_minutes: int) -> list[DueEv
                     start=start,
                     location=e["location"],
                     minutes_until_start=minutes_until,
+                    html_link=e["html_link"] if "html_link" in e.keys() else None,
                 )
             )
     return due
 
 
+def reminder_slots(db) -> dict[str, int]:
+    """{slot: minutes before start} for every reminder that's switched on.
+    "main" always; "backup" only when enabled in Settings and set to a
+    different time than the main one (the same time would just be the
+    same reminder twice)."""
+    slots = {"main": int(db.get_setting("reminder_minutes", str(DEFAULT_REMINDER_MINUTES)))}
+    if db.get_setting("backup_reminder_enabled", "0") == "1":
+        backup = int(db.get_setting("backup_reminder_minutes", str(DEFAULT_BACKUP_REMINDER_MINUTES)))
+        if backup != slots["main"]:
+            slots["backup"] = backup
+    return slots
+
+
 def run_reminder_cycle(
     db, notifier, now: datetime | None = None, account_email: str | None = None
 ) -> list[DueEvent]:
+    """One reminder check. With the backup reminder on, each meeting gets
+    up to two reminders — one when it enters each slot's window. If both
+    windows are entered at the same check (e.g. the app was only opened 3
+    minutes before the meeting), it's ONE reminder, not two back to back:
+    every slot that's due gets marked as sent together."""
     now = now or datetime.now(timezone.utc)
-    threshold_minutes = int(db.get_setting("reminder_minutes", str(DEFAULT_REMINDER_MINUTES)))
+    slots = reminder_slots(db)
+    threshold_minutes = max(slots.values())
     horizon = now + timedelta(minutes=threshold_minutes + 5)
     # The DB query's lower bound must allow the same grace period find_due_events
     # does below, or it silently excludes an event the instant "now" ticks past
@@ -125,16 +152,26 @@ def run_reminder_cycle(
 
     notified: list[DueEvent] = []
     for event in due:
-        if db.was_notified(event.event_id, event.calendar_id, event.start.isoformat()):
+        start_iso = event.start.isoformat()
+        sent = {slot for slot in slots if db.was_notified(event.event_id, event.calendar_id, start_iso, slot)}
+        due_now = {
+            slot
+            for slot, minutes in slots.items()
+            if slot not in sent and event.minutes_until_start <= minutes
+        }
+        if not due_now:
             continue
+        event = replace(event, is_second=bool(sent))
         notifier.notify(event)
-        db.mark_notified(
-            event.event_id,
-            event.calendar_id,
-            event.start.isoformat(),
-            now.isoformat(),
-            datetime.now(timezone.utc).isoformat(),
-        )
+        for slot in due_now:
+            db.mark_notified(
+                event.event_id,
+                event.calendar_id,
+                start_iso,
+                now.isoformat(),
+                datetime.now(timezone.utc).isoformat(),
+                slot=slot,
+            )
         notified.append(event)
 
     db.prune_old_notifications((now - timedelta(days=1)).isoformat())

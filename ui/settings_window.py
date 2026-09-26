@@ -16,7 +16,7 @@ from PySide6.QtWidgets import (
 
 import config
 from reminders.attention_cue import DEFAULT_SPEED_NAME, SPEED_CHOICES
-from reminders.reminder_service import SNOOZE_OPTIONS
+from reminders.reminder_service import DEFAULT_BACKUP_REMINDER_MINUTES, SNOOZE_OPTIONS
 from ui.reminder_alert import snooze_label
 from system import startup
 from ui.calendar_selector import CalendarSelectorWidget
@@ -140,6 +140,24 @@ class SettingsDialog(QDialog):
 
         layout.addRow("Notify me:", self._reminder_combo)
 
+        # Backup ("second") reminder: off for everyone by default. The time
+        # picker stays grayed out until the checkbox is ticked.
+        db = self._controller.db
+        self._backup_checkbox = QCheckBox("Also send a second (backup) reminder")
+        self._backup_checkbox.setChecked(db.get_setting("backup_reminder_enabled", "0") == "1")
+        self._backup_combo = QComboBox()
+        for minutes in REMINDER_OPTIONS:
+            self._backup_combo.addItem(_reminder_option_label(minutes), minutes)
+        backup_current = int(db.get_setting("backup_reminder_minutes", str(DEFAULT_BACKUP_REMINDER_MINUTES)))
+        self._backup_combo.setCurrentIndex(max(0, self._backup_combo.findData(backup_current)))
+        self._backup_combo.setEnabled(self._backup_checkbox.isChecked())
+        self._backup_checkbox.toggled.connect(self._on_backup_toggled)
+        self._backup_combo.currentIndexChanged.connect(
+            lambda i: db.set_setting("backup_reminder_minutes", str(self._backup_combo.itemData(i)))
+        )
+        layout.addRow(self._backup_checkbox)
+        layout.addRow("Second reminder:", self._backup_combo)
+
         self._snooze_combo = QComboBox()
         for minutes in SNOOZE_OPTIONS:
             self._snooze_combo.addItem(snooze_label(minutes), minutes)
@@ -149,6 +167,13 @@ class SettingsDialog(QDialog):
         )
         layout.addRow("Snooze for:", self._snooze_combo)
         return group
+
+    def _on_backup_toggled(self, checked: bool):
+        self._controller.db.set_setting("backup_reminder_enabled", "1" if checked else "0")
+        self._backup_combo.setEnabled(checked)
+        if checked:
+            # Save whatever the picker shows, so "on" always has a time.
+            self._controller.db.set_setting("backup_reminder_minutes", str(self._backup_combo.currentData()))
 
     def _on_reminder_changed(self, index: int):
         minutes = self._reminder_combo.itemData(index)

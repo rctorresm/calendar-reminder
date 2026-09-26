@@ -448,7 +448,7 @@ class MainWindow(QMainWindow):
         dialog = ReminderAlertDialog(
             event,
             accent_color=color,
-            offset_index=len(self._open_alerts),
+            offset_index=self._open_alert_count(),
             snooze_minutes=self._controller.snooze_minutes(),
         )
         dialog.snoozed.connect(lambda: self._controller.snooze(event))
@@ -464,6 +464,11 @@ class MainWindow(QMainWindow):
         # one gets dismissed while others remain).
         if not self._attention_flasher.is_active:
             self._start_flash(color)
+
+    def _open_alert_count(self) -> int:
+        """Reminders and change alerts share one stack in the middle of the
+        main screen, so each new window is nudged past all open ones."""
+        return len(self._open_alerts) + len(self._open_change_alerts)
 
     def _on_alert_acknowledged(self, key: tuple) -> None:
         self._open_alerts.pop(key, None)
@@ -485,7 +490,7 @@ class MainWindow(QMainWindow):
         if key in self._open_change_alerts:
             return
         calendar_color = resolve_color(self._controller.db.get_calendar_flash_color(change.calendar_id))
-        dialog = ChangeAlertDialog(change, calendar_color, offset_index=len(self._open_change_alerts))
+        dialog = ChangeAlertDialog(change, calendar_color, offset_index=self._open_alert_count())
         dialog.acknowledged.connect(lambda: self._on_change_alert_acknowledged(key))
         self._open_change_alerts[key] = dialog
         dialog.show()

@@ -263,11 +263,21 @@ class Database:
         return row is not None
 
     # ---- notifications -------------------------------------------------
+    #
+    # `slot` says which reminder this is: "main" (the one everyone has) or
+    # "backup" (the optional second reminder). The main slot is stored under
+    # the plain event_id exactly as before this existed, so rows already on
+    # disk keep meaning "main reminder sent"; other slots get a suffix. That
+    # avoids changing the table's primary key on existing databases.
 
-    def was_notified(self, event_id: str, calendar_id: str, event_start_iso: str) -> bool:
+    @staticmethod
+    def _slot_key(event_id: str, slot: str) -> str:
+        return event_id if slot == "main" else f"{event_id}::{slot}"
+
+    def was_notified(self, event_id: str, calendar_id: str, event_start_iso: str, slot: str = "main") -> bool:
         row = self._conn.execute(
             "SELECT 1 FROM notifications WHERE event_id = ? AND calendar_id = ? AND event_start = ?",
-            (event_id, calendar_id, event_start_iso),
+            (self._slot_key(event_id, slot), calendar_id, event_start_iso),
         ).fetchone()
         return row is not None
 
@@ -278,13 +288,14 @@ class Database:
         event_start_iso: str,
         notification_time_iso: str,
         sent_at_iso: str,
+        slot: str = "main",
     ) -> None:
         with self._conn:
             self._conn.execute(
                 """INSERT OR IGNORE INTO notifications
                    (event_id, calendar_id, event_start, notification_time, sent_at)
                    VALUES (?, ?, ?, ?, ?)""",
-                (event_id, calendar_id, event_start_iso, notification_time_iso, sent_at_iso),
+                (self._slot_key(event_id, slot), calendar_id, event_start_iso, notification_time_iso, sent_at_iso),
             )
 
     def prune_old_notifications(self, before_iso: str) -> None:

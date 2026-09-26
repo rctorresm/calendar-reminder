@@ -12,8 +12,8 @@ from __future__ import annotations
 
 import html
 
-from PySide6.QtCore import Qt, QTimer, Signal
-from PySide6.QtGui import QCloseEvent, QColor
+from PySide6.QtCore import Qt, QTimer, QUrl, Signal
+from PySide6.QtGui import QCloseEvent, QColor, QDesktopServices
 from PySide6.QtWidgets import (
     QApplication,
     QDialog,
@@ -23,8 +23,14 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
 )
 
-from reminders.notifications import build_reminder_text, format_start_phrase, format_time_12h
+from reminders.notifications import (
+    build_reminder_text,
+    format_start_phrase,
+    format_time_12h,
+    google_calendar_url,
+)
 from reminders.reminder_service import DEFAULT_SNOOZE_MINUTES, DueEvent
+from ui.alert_position import center_on_primary_screen
 
 
 def snooze_label(minutes: int) -> str:
@@ -45,7 +51,7 @@ class ReminderAlertDialog(QDialog):
     ):
         super().__init__(parent)
         self._event = event
-        self.setWindowTitle("Calendar Reminder")
+        self.setWindowTitle("Calendar Reminder — second reminder" if event.is_second else "Calendar Reminder")
         self.setWindowFlags(self.windowFlags() | Qt.WindowType.WindowStaysOnTopHint)
         self.setStyleSheet(
             "QDialog { border: 3px solid rgb(%d, %d, %d); }"
@@ -53,6 +59,11 @@ class ReminderAlertDialog(QDialog):
         )
 
         layout = QVBoxLayout(self)
+
+        if event.is_second:
+            second_label = QLabel("SECOND REMINDER")
+            second_label.setStyleSheet("color: gray; font-weight: bold; letter-spacing: 1px;")
+            layout.addWidget(second_label)
 
         title_label = QLabel(f"<b>{html.escape(event.title)}</b>")
         title_label.setWordWrap(True)
@@ -80,7 +91,13 @@ class ReminderAlertDialog(QDialog):
         ok_button = QPushButton("OK")
         ok_button.setDefault(True)
         ok_button.clicked.connect(self.close)
+        # Opens the meeting in the browser. Like Copy Reminder, it doesn't
+        # close the window or count as acknowledging it.
+        self._open_url = google_calendar_url(event.html_link, event.start)
+        self._open_button = QPushButton("Open in Google Calendar")
+        self._open_button.clicked.connect(lambda: QDesktopServices.openUrl(QUrl(self._open_url)))
         button_row.addWidget(self._copy_button)
+        button_row.addWidget(self._open_button)
         button_row.addStretch()
         button_row.addWidget(self._snooze_button)
         button_row.addWidget(ok_button)
@@ -109,13 +126,7 @@ class ReminderAlertDialog(QDialog):
         self.close()
 
     def _position(self, offset_index: int) -> None:
-        screen = QApplication.primaryScreen()
-        if not screen:
-            return
-        geometry = screen.availableGeometry()
-        x = geometry.center().x() - self.width() // 2
-        y = geometry.center().y() - self.height() // 2 + offset_index * 48
-        self.move(x, y)
+        center_on_primary_screen(self, offset_index)
 
     def closeEvent(self, event: QCloseEvent) -> None:
         self.acknowledged.emit()

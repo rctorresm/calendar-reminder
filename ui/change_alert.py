@@ -9,8 +9,6 @@ before reading a word of it:
 * A dark banner across the top with a big white icon: a plus for a new
   meeting, an X for canceled/moved, a pencil for changed. A reminder
   window has no banner and no icon.
-* It opens in the top-right corner of the screen (stacking downward),
-  not dead center where reminders open.
 
 The banner is the same dark color for every kind of change, on purpose.
 Color in this app means "whose calendar" (each calendar's flash color),
@@ -28,7 +26,6 @@ import html
 from PySide6.QtCore import QPointF, QRectF, Qt, QUrl, Signal
 from PySide6.QtGui import QCloseEvent, QColor, QDesktopServices, QPainter, QPen, QPolygonF
 from PySide6.QtWidgets import (
-    QApplication,
     QDialog,
     QHBoxLayout,
     QLabel,
@@ -39,7 +36,8 @@ from PySide6.QtWidgets import (
 
 from calendar_app.change_detector import ADDED, CHANGED, REMOVED, EventChange
 from reminders.attention_cue import CHANGE_STRIPE_DARK
-from reminders.notifications import describe_change_lines, describe_event_time
+from reminders.notifications import describe_change_lines, describe_event_time, google_calendar_url
+from ui.alert_position import center_on_primary_screen
 
 HEADINGS = {
     ADDED: "NEW MEETING",
@@ -54,8 +52,6 @@ WINDOW_TITLES = {
 }
 
 ICON_SIZE = 56
-SCREEN_MARGIN = 24
-STACK_OFFSET = 36
 
 
 def _rgb(color: QColor) -> str:
@@ -178,10 +174,14 @@ class ChangeAlertDialog(QDialog):
 
         button_row = QHBoxLayout()
         button_row.setContentsMargins(16, 8, 16, 0)
-        if change.kind in (ADDED, CHANGED) and event.html_link:
-            open_button = QPushButton("Open in Google Calendar")
-            open_button.clicked.connect(lambda: QDesktopServices.openUrl(QUrl(event.html_link)))
-            button_row.addWidget(open_button)
+        # On every change alert. A canceled/moved meeting's own link would
+        # just say "event not found", so that one opens the day instead.
+        self._open_url = google_calendar_url(
+            event.html_link, event.start, event.is_all_day, prefer_day=change.kind == REMOVED
+        )
+        open_button = QPushButton("Open in Google Calendar")
+        open_button.clicked.connect(lambda: QDesktopServices.openUrl(QUrl(self._open_url)))
+        button_row.addWidget(open_button)
         button_row.addStretch()
         ok_button = QPushButton("OK")
         ok_button.setDefault(True)
@@ -198,13 +198,7 @@ class ChangeAlertDialog(QDialog):
         return self._change
 
     def _position(self, offset_index: int) -> None:
-        screen = QApplication.primaryScreen()
-        if not screen:
-            return
-        geometry = screen.availableGeometry()
-        x = geometry.right() - self.width() - SCREEN_MARGIN
-        y = geometry.top() + SCREEN_MARGIN + offset_index * STACK_OFFSET
-        self.move(x, y)
+        center_on_primary_screen(self, offset_index)
 
     def closeEvent(self, event: QCloseEvent) -> None:
         self.acknowledged.emit()
