@@ -309,3 +309,62 @@ def test_change_alert_dialog_shows_the_right_icon_and_acknowledges_on_close():
         dialog.show()
         dialog.close()
         assert acked == [True]
+
+
+# ---- highlight box: what changed, big and colored ---------------------------
+
+from reminders.notifications import Highlight, describe_change_highlights  # noqa: E402
+from ui.change_alert import HIGHLIGHT_COLORS, highlight_html  # noqa: E402
+
+
+def test_highlights_added_removed():
+    now = LOCAL_NOON_FRIDAY
+    added = describe_change_highlights(EventChange(ADDED, CAL, occurrence("a", now + timedelta(hours=3))), now=now)
+    assert added == [Highlight("NEW", new="today at 3:00 PM")]
+    removed = describe_change_highlights(EventChange(REMOVED, CAL, occurrence("a", now + timedelta(hours=3))), now=now)
+    assert removed == [Highlight("CANCELED", old="today at 3:00 PM")]
+
+
+def test_highlight_for_same_day_move_shows_just_the_times_and_hides_redundant_end():
+    now = LOCAL_NOON_FRIDAY
+    old, new = occurrence("a", now + timedelta(hours=3)), occurrence("a", now + timedelta(hours=4))
+    change = EventChange(
+        CHANGED, CAL, new, previous=old,
+        fields=(FieldChange("start", old.start, new.start), FieldChange("end", old.end, new.end)),
+    )
+    assert describe_change_highlights(change, now=now) == [Highlight("Time", "3:00 PM", "4:00 PM")]
+
+
+def test_highlight_for_move_to_another_day_names_both_days():
+    now = LOCAL_NOON_FRIDAY
+    old, new = occurrence("a", now + timedelta(hours=3)), occurrence("a", now + timedelta(days=1, hours=3))
+    change = EventChange(CHANGED, CAL, new, fields=(FieldChange("start", old.start, new.start),))
+    (item,) = describe_change_highlights(change, now=now)
+    assert (item.old, item.new) == ("today at 3:00 PM", "tomorrow at 3:00 PM")
+
+
+def test_each_kind_gets_its_own_highlight_color():
+    assert HIGHLIGHT_COLORS[ADDED][0] != HIGHLIGHT_COLORS[CHANGED][0] != HIGHLIGHT_COLORS[REMOVED][0]
+    for kind, item in (
+        (ADDED, Highlight("NEW", new="today")),
+        (CHANGED, Highlight("Time", "3:00 PM", "4:00 PM")),
+        (REMOVED, Highlight("CANCELED", old="today")),
+    ):
+        assert HIGHLIGHT_COLORS[kind][0] in highlight_html(item, kind)
+
+
+def test_changed_highlight_crosses_out_old_value_and_bolds_new():
+    text = highlight_html(Highlight("Time", "3:00 PM", "4:00 PM"), CHANGED)
+    assert "<s>3:00 PM</s>" in text
+    assert "font-weight: bold" in text and "4:00 PM" in text
+
+
+def test_highlight_escapes_values_from_other_peoples_calendars():
+    text = highlight_html(Highlight("Renamed", "<b>old</b>", "<script>x</script>"), CHANGED)
+    assert "<script>" not in text and "&lt;script&gt;" in text
+
+
+def test_change_alert_window_contains_the_highlight_box():
+    change = EventChange(ADDED, CAL, occurrence("a", START), calendar_name="Boss")
+    dialog = ChangeAlertDialog(change, COLOR_CHOICES["blue"])
+    assert HIGHLIGHT_COLORS[ADDED][1] in dialog._highlight_box.styleSheet()

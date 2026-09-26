@@ -242,6 +242,12 @@ next week — today plus the next six days, on a rolling basis — was:
 | **Canceled / deleted / moved more than 7 days out** | big **✕**, "MEETING CANCELED / MOVED" |
 | **Changed** (time or day, title, location, description) | big **pencil**, "MEETING CHANGED", old → new |
 
+Right under the meeting title, a **highlight box** shows exactly what
+changed in large, bold, colored text: **green** for a new meeting
+("NEW  today at 3:00 PM"), **orange** for a change, with the old value
+crossed out and the new one in bold ("Time: ~~3:00 PM~~ → **4:00 PM**"),
+and **red** for a cancellation ("CANCELED  ~~today at 3:00 PM~~").
+
 Every change alert has the same dark banner and a black-and-white
 striped screen border that double-blinks — no color of its own, because
 color in this app means "whose calendar" (shown as a small dot next to
